@@ -1,133 +1,81 @@
-import os
-import random
-import re
-import threading
-import time
 import telebot
 from telebot import types
+import random
+import threading
+import time
+import os
 
-# Carga el TOKEN desde las variables de entorno de Railway
 TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# --- PACK DE STICKERS DE CHERRIEBOT ---
-STICKERS_CHERRIE = [
-    "CAACAgEAAxkBAANHaoVbwH1bR16BovjZpvbzdmYAAcv5AAJKCAACh1YpROPnWzoUB7hkPQQ",
-    "CAACAgEAAxkBAANJaoVbxFwCt6v7Dc4Bq5MBVviJkq0AAkIGAAKaKilEw6n5UhHxucY9BA",
-    "CAACAgEAAxkBAANLaoVbxu0C4Pf13Q4h4--008tHtA0AAjwHAALY5ShExZIILPgB8XU9BA",
-    "CAACAgEAAxkBAANNaoVbx0HIrfh3HaoEnRnq2TiF2FYAAgoHAAJDLjFED9e__RIuw0g9BA",
-    "CAACAgEAAxkBAANPaoVbyYS2PuWDTuGSdGdWwcA7onQAAp8IAALviDFErpsOg5jJa4g9BA",
-    "CAACAgEAAxkBAANRaoVby-CNkO8cMAw7x6E2yUThMaoAAtkGAALl9SlEbGxRRm1A0vM9BA"
-]
-
-# --- ESTADOS GLOBALES ---
 sorteos = {}
-puntos_sistema = {}          # {username: puntos_int}
-quiz_aciertos = {}          # {username: total_aciertos_int}
 
-quiz_juego = {
-    "fase": "inactivo",
-    "chat_id": None,
-    "thread_id": None,
-    "premio": "",
-    "participantes": set(),
-    "participantes_activos": set(),
-    "pregunta_actual": None,
-    "opcion_correcta": None,
-    "respuestas": {},
-    "msg_lobby_id": None,
-    "msg_pregunta_id": None,
-    "dificultad": 1
-}
-
-mineria_juego = {
-    "fase": "inactivo",
-    "chat_id": None,
-    "thread_id": None,
-    "premio": "",
-    "participantes": [],
-    "puntos": {},
-    "turnos_restantes": {},
-    "turno_actual_index": 0,
-    "msg_lobby_id": None
-}
-
-loteria_juego = {
-    "fase": "inactivo",
-    "chat_id": None,
-    "thread_id": None,
-    "premio": "",
-    "tickets_vendidos": {}, # {ticket_code: username}
-    "usuarios_registrados": set(),
-    "ticket_ganador": None,
-    "ganador_esperado": None,
-    "tiempo_limite": 0,
-    "reclamado": False
-}
-
-# --- DETECTAR APARTADO/TEMA ACTUAL ---
 def get_thread_id(message):
     return message.message_thread_id if message.is_topic_message else None
 
-# --- OBTENER FILE_ID DE CUALQUIER STICKER ---
-@bot.message_handler(content_types=['sticker'])
-def capturar_sticker_id(message):
-    file_id = message.sticker.file_id
-    pack_name = message.sticker.set_name if message.sticker.set_name else "Desconocido"
-    bot.reply_to(
-        message, 
-        f"Sticker capturado\n\nPack: {pack_name}\nFile ID:\n{file_id}", 
-        parse_mode="Markdown"
-    )
+# --- FUNCIONES AUXILIARES OBLIGATORIAS ---
+def generar_texto_sorteo(premio, minutos_restantes, ganadores):
+    return f"🎉 **¡SORTEO ACTIVO!**\n\n🏆 Premio: {premio}\n⏳ Quedan: {minutos_restantes} min\n👤 Ganadores: {ganadores}"
 
-# --- COMANDOS BÁSICOS ---
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    if message.chat.type == 'private':
-        nombre_usuario = message.from_user.first_name
-        bot.send_message(
-            message.chat.id, 
-            f"૮₍˶ᵔ ᵕ ᵔ˶₎ა   ¡holi, {nombre_usuario}! soy cherrie, el bot oficial de cherrys que ayuda en dinámicas para que tú te diviertas y consigas los mejores premios ♡."
-        )
+def generar_texto_resultados(premio, ganadores_str):
+    return f"🎊 **¡RESULTADOS DEL SORTEO!**\n\n🏆 Premio: {premio}\n👑 Ganador/es: {ganadores_str}"
 
-@bot.message_handler(commands=['help'])
-def send_help(message):
-    thread_id = get_thread_id(message)
-    if message.chat.type != 'private':
-        nombre_usuario = message.from_user.first_name
-        bot.send_message(
-            message.chat.id, 
-            f"૮₍˶ᵔ ᵕ ᵔ˶₎ა   ¡holi, {nombre_usuario}! soy cherrie, el bot oficial de cherrys que ayuda en dinámicas para que tú te diviertas y consigas los mejores premios ♡.",
-            message_thread_id=thread_id,
-            reply_to_message_id=message.message_id
-        )
+def ejecutar_fin_sorteo(chat_id):
+    if chat_id not in sorteos or not sorteos[chat_id]["activo"]:
+        return
+    datos = sorteos[chat_id]
+    datos["activo"] = False
+    
+    if not datos["participantes"]:
+        bot.send_message(chat_id, " (╥﹏╥) El sorteo terminó sin participantes.")
+        return
 
-# --- COMANDO /BEG ---
-@bot.message_handler(commands=['beg'])
-def suplicar_robux(message):
+    elegibles = list(datos["participantes"])
+    ganador = random.choice(elegibles)
+    datos["ganadores_anteriores"].append(ganador)
+    
+    bot.send_message(chat_id, generar_texto_resultados(datos["premio"], f"@{ganador}"))
+
+# --- COMANDO RESORTEO ---
+@bot.message_handler(commands=['resorteo'])
+def resortear(message):
     chat_id = message.chat.id
     thread_id = get_thread_id(message)
-    user_id = message.from_user.id
-    first_name = message.from_user.first_name
 
-    mencion_nickname = f'<a href="tg://user?id={user_id}">{first_name}</a>'
+    if chat_id not in sorteos or not sorteos[chat_id]["participantes"]:
+        bot.send_message(chat_id, " (╥﹏╥)  no hay un sorteo reciente para volver a sortear.", message_thread_id=thread_id)
+        return
 
-    if message.reply_to_message and message.reply_to_message.from_user:
-        target_user = message.reply_to_message.from_user
-        bot.send_message(
-            chat_id,
-            f"¡{mencion_nickname} le está pidiendo Robux a {target_user.first_name}! 🥺🤲",
-            parse_mode="HTML",
-            message_thread_id=thread_id
-        )
-    else:
-        bot.send_message(
-            chat_id,
-            f"¡{mencion_nickname} está suplicando por Robux a la nada! 🥺🤲",
-            parse_mode="HTML",
-            message_thread_id=thread_id
-        )
+    datos = sorteos[chat_id]
+    elegibles = [p for p in datos["participantes"] if p not in datos["ganadores_anteriores"]]
+    
+    if not elegibles:
+        bot.send_message(chat_id, " (╥﹏╥)  no quedan más participantes disponibles.", message_thread_id=thread_id)
+        return
 
-# Mantiene el bot activo 24/7 en el servidor
+    bot.send_message(chat_id, "(๑´`๑)  ¡eligiendo nuevo ganador!", message_thread_id=thread_id)
+    time.sleep(2)
+
+    nuevo_ganador = random.choice(elegibles)
+    datos["ganadores_anteriores"].append(nuevo_ganador)
+    bot.send_message(chat_id, generar_texto_resultados(datos["premio"], f"@{nuevo_ganador}"), message_thread_id=thread_id)
+
+# --- MONITOR EN SEGUNDO PLANO ---
+def monitor_sorteos():
+    while True:
+        try:
+            ahora = time.time()
+            for chat_id, datos in list(sorteos.items()):
+                if datos.get("activo") and datos.get("tiempo_fin"):
+                    if ahora >= datos["tiempo_fin"]:
+                        ejecutar_fin_sorteo(chat_id)
+        except Exception as e:
+            print(f"Error en monitor: {e}")
+        time.sleep(10)
+
+hilo_monitor = threading.Thread(target=monitor_sorteos, daemon=True)
+hilo_monitor.start()
+
+# --- ARRANQUE 24/7 ---
 if __name__ == '__main__':
     bot.infinity_polling()
