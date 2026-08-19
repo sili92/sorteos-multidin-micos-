@@ -1,10 +1,9 @@
-import os
-import random
-import re
-import threading
-import time
 import telebot
 from telebot import types
+import random
+import threading
+import time
+import re
 
 # --- CONFIGURACIÓN DE TOKEN Y BOT ---
 TOKEN = os.getenv('BOT_TOKEN')
@@ -76,7 +75,7 @@ def capturar_sticker_id(message):
     pack_name = message.sticker.set_name if message.sticker.set_name else "Desconocido"
     bot.reply_to(
         message, 
-        f" Sticker capturado\n\nPack: {pack_name}\nFile ID:\n{file_id}", 
+        f"🌸 Sticker capturado\n\nPack: {pack_name}\nFile ID:\n{file_id}", 
         parse_mode="Markdown"
     )
 
@@ -110,17 +109,21 @@ def suplicar_robux(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
 
+    # Mención por nickname (first_name) vinculada en HTML
     mencion_nickname = f'<a href="tg://user?id={user_id}">{first_name}</a>'
 
+    # Verificar si el comando se usó en respuesta a un mensaje de otra persona
     if message.reply_to_message and message.reply_to_message.from_user:
         target_user = message.reply_to_message.from_user
-        target_id = target_user.id
+target_id = target_user.id
         target_name = target_user.first_name
         target_mencion = f'<a href="tg://user?id={target_id}">{target_name}</a>'
         texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} le está suplicando a {target_mencion} por robux...ㅤ"
     else:
+        # Si no se responde a nadie, solo muestra al usuario que usó el comando
         texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} suplica por robux...ㅤ"
 
+    # 1. Envío del mensaje formateado en HTML
     bot.send_message(
         chat_id, 
         texto, 
@@ -129,6 +132,7 @@ def suplicar_robux(message):
         reply_to_message_id=message.message_id
     )
 
+    # 2. Envío de sticker aleatorio del pack
     if STICKERS_CHERRIE:
         sticker_elegido = random.choice(STICKERS_CHERRIE)
         try:
@@ -215,8 +219,7 @@ def parsear_comando_sorteo(texto):
 def crear_sorteo(message):
     chat_id, user_id = message.chat.id, message.from_user.id
     thread_id = get_thread_id(message)
-
-    try:
+try:
         if bot.get_chat_member(chat_id, user_id).status not in ['administrator', 'creator']:
             bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar un sorteo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
             return
@@ -311,8 +314,7 @@ def finalizar_sorteo(message):
             return
     except Exception:
         pass
-
-    if chat_id not in sorteos or not sorteos[chat_id]["activo"]:
+if chat_id not in sorteos or not sorteos[chat_id]["activo"]:
         bot.send_message(chat_id, " (╥﹏╥)  no hay ningún sorteo activo en este chat.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
@@ -336,7 +338,7 @@ def resortear(message):
 
     datos = sorteos[chat_id]
     elegibles = [p for p in datos["participantes"] if p not in datos["ganadores_anteriores"]]
-
+    
     if not elegibles:
         bot.send_message(chat_id, " (╥﹏╥)  no quedan más participantes disponibles para resortear.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
@@ -371,7 +373,8 @@ def monitor_sorteos():
             print(f"Error en monitor de sorteos: {e}")
         time.sleep(30)
 
-hilo_monitor = threading.Thread(target=monitor_sorteos, daemon=True)
+hilo_monitor = threading.Thread(target=monitor_sorteos)
+hilo_monitor.daemon = True
 hilo_monitor.start()
 
 # --- BANCO COMPLETO DE PREGUNTAS ---
@@ -383,7 +386,7 @@ BANCO_PREGUNTAS = [
     {"p": "¿cuál es el planeta más grande del sistema solar?", "o": ["Júpiter", "Saturno", "Neptuno", "Marte"], "c": 0},
     {"p": "¿quién pintó la mona lisa?", "o": ["Vincent van Gogh", "Leonardo da Vinci", "Pablo Picasso", "Claude Monet"], "c": 1},
     {"p": "¿cuál es la capital de japón?", "o": ["Kioto", "Osaka", "Tokio", "Hokkaido"], "c": 2},
-    {"p": "¿cuántos huesos tiene el cuerpo humano adulto?", "o": ["206", "210", "198", "205"], "c": 0},
+{"p": "¿cuántos huesos tiene el cuerpo humano adulto?", "o": ["206", "210", "198", "205"], "c": 0},
     {"p": "¿cuál es el océano más grande del mundo?", "o": ["Atlántico", "Índico", "Pacífico", "Ártico"], "c": 2},
     {"p": "¿en qué continente se encuentra egipto?", "o": ["Asia", "África", "Europa", "Oceanía"], "c": 1},
     {"p": "capital de canadá", "o": ["Ottawa", "Washington", "Varsovia", "Moscú"], "c": 0},
@@ -414,57 +417,13 @@ BANCO_PREGUNTAS = [
     {"p": "¿cuál es la unidad básica de la vida?", "o": ["Átomo", "Célula", "Molécula"], "c": 1},
     {"p": "¿qué pigmento le da el color verde a las plantas?", "o": ["Clorofila", "Caroteno", "Melanina"], "c": 0},
     {"p": "¿qué órgano del cuerpo humano es responsable de bombear la sangre?", "o": ["Pulmón", "Hígado", "Corazón"], "c": 2},
-    {"p": "¿a qué grupo de animales pertenecen las ballenas?", "o": ["Peces", "Mamíferos", "Anfibios"], "c": 1},
+{"p": "¿a qué grupo de animales pertenecen las ballenas?", "o": ["Peces", "Mamíferos", "Anfibios"], "c": 1},
     {"p": "¿cuánto es 7 x 8?", "o": ["54", "56", "64"], "c": 1},
     {"p": "¿cuál es la raíz cuadrada de 81?", "o": ["8", "9", "12"], "c": 1},
     {"p": "¿cómo se llama un triángulo que tiene sus tres lados de igual longitud?", "o": ["Isósceles", "Escaleno", "Equilátero"], "c": 2},
     {"p": "si un ángulo mide exactamente 90 grados, ¿cómo se clasifica?", "o": ["Agudo", "Recto", "Obtuso"], "c": 1},
     {"p": "¿qué científico formuló la ley de la gravitación universal?", "o": ["Albert Einstein", "Isaac Newton", "Galileo Galilei"], "c": 1}
-]
 
-# --- SISTEMA DE QUIZ ---
-@bot.message_handler(commands=['quiz'])
-def iniciar_quiz(message):
-    chat_id = message.chat.id
-    thread_id = get_thread_id(message)
-    partes = message.text.split(maxsplit=1)
-
-    if len(partes) < 2:
-        bot.send_message(
-            chat_id, 
-            " (╥﹏╥)  ¡recuerda! debes especificar el premio. Ejemplo: `/quiz 10 robux`", 
-            parse_mode="Markdown", 
-            message_thread_id=thread_id
-        )
-        return
-
-    premio = partes[1]
-    pregunta = random.choice(BANCO_PREGUNTAS)
-
-    markup = types.InlineKeyboardMarkup()
-    for idx, opcion in enumerate(pregunta["o"]):
-        es_correcta = "1" if idx == pregunta["c"] else "0"
-        markup.add(types.InlineKeyboardButton(opcion, callback_data=f"ans_quiz_{es_correcta}"))
-
-    bot.send_message(
-        chat_id, 
-        f"🧠 **¡NUEVO QUIZ POR: {premio}!**\n\n❓ **Pregunta:** {pregunta['p']}", 
-        reply_markup=markup, 
-        parse_mode="Markdown", 
-        message_thread_id=thread_id
-    )
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("ans_quiz_"))
-def respuesta_quiz(call):
-    es_correcta = call.data.split("_")[2]
-    username = call.from_user.first_name
-
-    if es_correcta == "1":
-        bot.answer_callback_query(call.id, "¡CORRECTO! 🎉", show_alert=True)
-        bot.send_message(call.message.chat.id, f"🎉 ¡{username} ha respondido correctamente!")
-    else:
-        bot.answer_callback_query(call.id, "Incorrecto ❌ Intenta de nuevo.", show_alert=True)
-
-# --- EJECUCIÓN CONTINUA ---
+# --- ARRANQUE 24/7 ---
 if __name__ == '__main__':
     bot.infinity_polling()
