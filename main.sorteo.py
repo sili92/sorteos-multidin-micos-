@@ -32,10 +32,10 @@ BANCO_QUIZ = [
     {"topic": "películas", "p": "¿Quién NO es una princesa de Disney oficial?", "o": ["Aurora", "Bella", "Elsa"], "c": 2}
 ]
 
-# --- TABLA DE PREMIOS MINERÍA (PESOS Y PUNTOS) ---
+# --- TABLA DE PREMIOS MINERÍA (PROBABILIDADES Y PUNTOS) ---
 PREMIOS_MINERIA = [
     {"peso": 20, "puntos": 0, "msg": "✦ @{user}, encontraste...\n\nnada... ( ꩜ ᯅ ꩜;)\n¡suerte para la próxima!"},
-    {"peso": 15, "puntos": 3, "msg": "✦ @{user}, encontraste... una piedrita común...\n૮ • ﻌ - ა ¡tienes 3 puntos!"},
+    {"peso": 15, "puntos": 3, "msg": "✦ @{user}, encontraste... una piedrita común...\n૮ • ﻌ - me ¡tienes 3 puntos!"},
     {"peso": 12, "puntos": 5, "msg": "✦ @{user}, encontraste... un pedacito de carbón...\n(´๑•_•๑) no es mucho, pero sirve...\n¡tienes 5 puntos!"},
     {"peso": 10, "puntos": 8, "msg": "✦ @{user}, encontraste... una piedra que brilla un poquito...\n૮₍´｡• ᵕ •｡₎ა ¡tienes 8 puntos!"},
     {"peso": 8, "puntos": 12, "msg": "✦ @{user}, encontraste... un cristal de cuarzo pequeño...\n(ᐡ･ ﻌ ･ᐡ) ¡qué bonito!\n¡tienes 12 puntos!"},
@@ -53,8 +53,8 @@ PREMIOS_MINERIA = [
     {"peso": 0.2, "puntos": 100, "msg": "✦ @{user}, encontraste... el tesoro secreto de Cherrie...\n(♡´𓈒𓂂˘˘`♡) ¡encontraste algo que casi nadie encuentra!\n¡tienes 100 puntos!"}
 ]
 
-# --- ESTADOS GLOBALES DE LOS JUEGOS ---
-sorteos = {}         # {chat_id: data}
+# --- ESTADOS GLOBALES ---
+sorteos = {}
 quiz_juego = {
     "fase": "inactivo", "topic": "", "pregunta": None, "votos": {}, 
     "stats": {}, "chat_id": None, "thread_id": None, "top1_prev": None,
@@ -102,9 +102,9 @@ def suplicar_robux(message):
     if message.reply_to_message and message.reply_to_message.from_user:
         target = message.reply_to_message.from_user
         target_mencion = f'<a href="tg://user?id={target.id}">{target.first_name}</a>'
-        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion} le está suplicando a {target_mencion} por robux...ㅤ"
+        texto = f"ㅤ૮  .ܸ  .ܸ ྀི me  ㅤ{mencion} le está suplicando a {target_mencion} por robux...ㅤ"
     else:
-        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion} suplica por robux...ㅤ"
+        texto = f"ㅤ૮  .ܸ  .ܸ ྀི me  ㅤ{mencion} suplica por robux...ㅤ"
 
     bot.send_message(chat_id, texto, parse_mode="HTML", message_thread_id=thread_id, reply_to_message_id=message.message_id)
     if STICKERS_CHERRIE:
@@ -216,7 +216,7 @@ def resortear(message):
     nuevos_ganadores = random.sample(parts, c)
     g_str = ", ".join([f"@{g}" for g in nuevos_ganadores])
 
-    bot.send_message(chat_id, generar_texto_resultados(data["premio"], g_str, data["admin_user"]), message_thread_id=thread_id)
+    bot.send_message(chat_id, generar_texto_resultados(data["premio"], g_str, data["admin_user"]), message_thread_id=data["thread_id"])
 
 def monitor_sorteos():
     while True:
@@ -228,7 +228,7 @@ def monitor_sorteos():
 
 threading.Thread(target=monitor_sorteos, daemon=True).start()
 
-# --- JUEGO 2: QUIZ CON OPCIONES Y /quizlegends ---
+# --- JUEGO: QUIZ CON OPCIONES Y /quizlegends ---
 @bot.message_handler(commands=['quiz'])
 def iniciar_quiz(message):
     chat_id = message.chat.id
@@ -284,13 +284,11 @@ def evaluar_quiz(chat_id, thread_id):
     res = f"(๑>ᴗ<๑)    ¡todos respondieron!\n𓂃   ¡Ganadores! : {g_str}\n𓂃   Perdedores... : {p_str}"
     bot.send_message(chat_id, res, message_thread_id=thread_id)
 
-    # Actualizar estadisticas
     for g in ganadores:
         quiz_juego["stats"][g] = quiz_juego["stats"].get(g, 0) + 1
         if g not in quiz_juego["ganadores_orden"]:
             quiz_juego["ganadores_orden"].append(g)
 
-    # Mensaje de acomulacion si hay victorias
     if quiz_juego["stats"]:
         mostrar_quiz_legends(chat_id, thread_id)
 
@@ -303,7 +301,6 @@ def mostrar_quiz_legends(chat_id, thread_id):
         bot.send_message(chat_id, " (╥﹏╥) Aún no hay registros en Quiz Legends.", message_thread_id=thread_id)
         return
 
-    # Ordenar por victorias
     sorted_stats = sorted(quiz_juego["stats"].items(), key=lambda x: (-x[1], quiz_juego["ganadores_orden"].index(x[0])))
 
     lines = ["      ‿︵       𝘘𝘶𝘪𝘻 𝘓𝘦𝘨𝘦𝘯𝘥𝘴 !\n"]
@@ -312,20 +309,16 @@ def mostrar_quiz_legends(chat_id, thread_id):
     
     msg_stats = "\n".join(lines)
 
-    # Evaluación de Mensajitos dinámicos al final
     extra_msg = ""
     top1_user, top1_vic = sorted_stats[0]
 
     if len(sorted_stats) >= 2:
         top2_user, top2_vic = sorted_stats[1]
         
-        # Empate en 1er lugar
         if top1_vic == top2_vic:
             extra_msg = f"\n\n¡@{top1_user} y @{top2_user} compiten por el primer puesto..."
-        # Remontada
         elif quiz_juego["top1_prev"] and quiz_juego["top1_prev"] != top1_user:
             extra_msg = f"\n\n¡Remontada de @{top1_user} ٩(ˊᗜˋ*)و ♡"
-        # Ventaja clara (2-3 más)
         elif top1_vic >= top2_vic + 2:
             extra_msg = f"\n\nCuidado con @{top1_user}...  ૮₍•᷄ ࡇ •᷅₎ა"
     else:
@@ -344,7 +337,7 @@ def endquiz(message):
         quiz_juego["top1_prev"] = None
         bot.send_message(message.chat.id, " (╥﹏╥) Quiz finalizado y estadísticas reiniciadas.", message_thread_id=get_thread_id(message))
 
-# --- JUEGO 3: MINERÍA ---
+# --- JUEGO: MINERÍA ---
 @bot.message_handler(commands=['mineria'])
 def iniciar_mineria(message):
     chat_id = message.chat.id
@@ -388,7 +381,7 @@ def siguiente_turno_mineria():
     idx = mineria_juego["turno_index"] % len(parts)
     actual = parts[idx]
 
-    texto = f"ㅤ$&nbsp; ࣪ ׅ ㅤㅤ¡turno de @{actual}!\nㅤ— ㅤㅤusa /minar para probar tu suerte."
+    texto = f"ㅤ୭ৎ ࣪ ׅ ㅤㅤ¡turno de @{actual}!\nㅤ— ㅤㅤusa /minar para probar tu suerte."
     bot.send_message(mineria_juego["chat_id"], texto, message_thread_id=mineria_juego["thread_id"])
 
 @bot.message_handler(commands=['minar'])
@@ -401,7 +394,6 @@ def minar_cmd(message):
     if user != actual:
         return
 
-    # Selección aleatoria ponderada
     opciones = PREMIOS_MINERIA
     pesos = [o["peso"] for o in opciones]
     premio = random.choices(opciones, weights=pesos, k=1)[0]
@@ -431,7 +423,7 @@ def endmineria(message):
         mineria_juego["participantes"].clear()
         bot.send_message(message.chat.id, " (╥﹏╥) Minería finalizada y puntos reiniciados.", message_thread_id=get_thread_id(message))
 
-# --- JUEGO 4: LOTERÍA CHERRIE ---
+# --- JUEGO: LOTERÍA CHERRIE ---
 @bot.message_handler(commands=['loteria'])
 def iniciar_loteria(message):
     chat_id = message.chat.id
@@ -469,7 +461,6 @@ def pedir_tickets(message):
 
     loteria_juego["tickets"][user] = mis_tickets
     
-    # Formato monoespaciado exacto
     tickets_fmt = "\n".join([f"`{t}`" for t in mis_tickets])
     bot.send_message(message.chat.id, tickets_fmt, parse_mode="Markdown", message_thread_id=get_thread_id(message))
 
