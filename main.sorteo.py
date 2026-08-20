@@ -29,15 +29,10 @@ quiz_juego = {
     "fase": "inactivo",
     "chat_id": None,
     "thread_id": None,
-    "premio": "",
-    "participantes": set(),
-    "participantes_activos": set(),
     "pregunta_actual": None,
-    "opcion_correcta": None,
-    "respuestas": {},
-    "msg_lobby_id": None,
-    "msg_pregunta_id": None,
-    "dificultad": 1
+    "votos": {},             # {username: indice_opcion}
+    "top1_prev": None,
+    "ganadores_orden": []
 }
 
 mineria_juego = {
@@ -57,7 +52,7 @@ loteria_juego = {
     "chat_id": None,
     "thread_id": None,
     "premio": "",
-    "tickets_vendidos": {}, # {ticket_code: username}
+    "tickets_vendidos": {},  # {ticket_code: username}
     "usuarios_registrados": set(),
     "ticket_ganador": None,
     "ganador_esperado": None,
@@ -110,10 +105,8 @@ def suplicar_robux(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name
 
-    # Mención por nickname (first_name) vinculada en HTML
     mencion_nickname = f'<a href="tg://user?id={user_id}">{first_name}</a>'
 
-    # Verificar si el comando se usó en respuesta a un mensaje de otra persona
     if message.reply_to_message and message.reply_to_message.from_user:
         target_user = message.reply_to_message.from_user
         target_id = target_user.id
@@ -121,10 +114,8 @@ def suplicar_robux(message):
         target_mencion = f'<a href="tg://user?id={target_id}">{target_name}</a>'
         texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} le está suplicando a {target_mencion} por robux...ㅤ"
     else:
-        # Si no se responde a nadie, solo muestra al usuario que usó el comando
         texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} suplica por robux...ㅤ"
 
-    # 1. Envío del mensaje formateado en HTML
     bot.send_message(
         chat_id, 
         texto, 
@@ -133,7 +124,6 @@ def suplicar_robux(message):
         reply_to_message_id=message.message_id
     )
 
-    # 2. Envío de sticker aleatorio del pack
     if STICKERS_CHERRIE:
         sticker_elegido = random.choice(STICKERS_CHERRIE)
         try:
@@ -163,7 +153,7 @@ def cancelar_juego_activo(message):
 
     if quiz_juego["fase"] != "inactivo":
         quiz_juego["fase"] = "inactivo"
-        juego_cancelado = "quiz de batalla"
+        juego_cancelado = "quiz"
 
     if mineria_juego["fase"] != "inactivo":
         mineria_juego["fase"] = "inactivo"
@@ -426,6 +416,117 @@ BANCO_PREGUNTAS = [
     {"p": "si un ángulo mide exactamente 90 grados, ¿cómo se clasifica?", "o": ["Agudo", "Recto", "Obtuso"], "c": 1},
     {"p": "¿qué científico formuló la ley de la gravitación universal?", "o": ["Albert Einstein", "Isaac Newton", "Galileo Galilei"], "c": 1}
 ]
+
+# --- SISTEMA DE QUIZ / BATTLE ---
+@bot.message_handler(commands=['quiz'])
+def iniciar_quiz(message):
+    chat_id = message.chat.id
+    thread_id = get_thread_id(message)
+
+    if quiz_juego["fase"] == "jugando":
+        bot.send_message(chat_id, " (╥﹏╥) Ya hay una pregunta activa en curso.", message_thread_id=thread_id)
+        return
+
+    q = random.choice(BANCO_PREGUNTAS)
+    quiz_juego["fase"] = "jugando"
+    quiz_juego["pregunta_actual"] = q
+    quiz_juego["votos"] = {}
+    quiz_juego["chat_id"] = chat_id
+    quiz_juego["thread_id"] = thread_id
+
+    markup = types.InlineKeyboardMarkup()
+    for idx, opcion in enumerate(q["o"]):
+        markup.add(types.InlineKeyboardButton(f"✦ {opcion}", callback_data=f"quiz_resp_{idx}"))
+
+    texto = f"ㅤㅤᡣ𐭩ㅤㅤㅤ¡Pregunta de Quiz!\n\n𓂃 {q['p']}"
+    bot.send_message(chat_id, texto, reply_markup=markup, message_thread_id=thread_id)
+
+    threading.Thread(target=temporizador_quiz, args=(chat_id, thread_id), daemon=True).start()
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("quiz_resp_"))
+def callback_respuesta_quiz(call):
+    if quiz_juego["fase"] != "jugando":
+        bot.answer_callback_query(call.id, "Esta ronda de preguntas ya finalizó.", show_alert=True)
+        return
+
+    idx_elegido = int(call.data.split("_")[2])
+    usuario = call.from_user.username if call.from_user.username else call.from_user.first_name
+
+    quiz_juego["votos"][usuario] = idx_elegido
+    bot.answer_callback_query(call.id, "¡Respuesta registrada!")
+
+def temporizador_quiz(chat_id, thread_id):
+    time.sleep(30)
+    if quiz_juego["fase"] == "jugando":
+        evaluar_quiz(chat_id, thread_id)
+
+def evaluar_quiz(chat_id, thread_id):
+    quiz_juego["fase"] = "inactivo"
+    q = quiz_juego["pregunta_actual"]
+    correcta_idx = q["c"]
+
+    ganadores = [u for u, opt in quiz_juego["votos"].items() if opt == correcta_idx]
+    perdedores = [u for u, opt in quiz_juego["votos"].items() if opt != correcta_idx]
+
+    g_str = ", ".join([f"@{u}" for u in ganadores]) if ganadores else "Nadie"
+    p_str = ", ".join([f"@{u}" for u in perdedores]) if perdedores else "Nadie"
+
+    res = f"(๑>ᴗ<๑) ¡Tiempo agotado!\n\n𓂃 Correcta: {q['o'][correcta_idx]}\n𓂃 Ganadores: {g_str}\n𓂃 Perdedores: {p_str}"
+    bot.send_message(chat_id, res, message_thread_id=thread_id)
+
+    for g in ganadores:
+        quiz_aciertos[g] = quiz_aciertos.get(g, 0) + 1
+        if g not in quiz_juego["ganadores_orden"]:
+            quiz_juego["ganadores_orden"].append(g)
+
+    if quiz_aciertos:
+        mostrar_quiz_legends(chat_id, thread_id)
+
+@bot.message_handler(commands=['quizlegends'])
+def comando_quizlegends(message):
+    mostrar_quiz_legends(message.chat.id, get_thread_id(message))
+
+def mostrar_quiz_legends(chat_id, thread_id):
+    if not quiz_aciertos:
+        bot.send_message(chat_id, " (╥﹏╥) Aún no hay registros en Quiz Legends.", message_thread_id=thread_id)
+        return
+
+    sorted_stats = sorted(quiz_aciertos.items(), key=lambda x: (-x[1], quiz_juego["ganadores_orden"].index(x[0]) if x[0] in quiz_juego["ganadores_orden"] else 999))
+
+    lines = ["      ‿︵       𝘘𝘶𝘪𝘻 𝘓𝘦𝘨𝘦𝘯𝘥𝘴 !\n"]
+    for user, vic in sorted_stats:
+        lines.append(f"✦ @{user} — {vic} victorias.")
+
+    msg_stats = "\n".join(lines)
+    top1_user, top1_vic = sorted_stats[0]
+    extra_msg = ""
+
+    if len(sorted_stats) >= 2:
+        top2_user, top2_vic = sorted_stats[1]
+        if top1_vic == top2_vic:
+            extra_msg = f"\n\n¡@{top1_user} y @{top2_user} están empatados en el primer puesto!"
+        elif quiz_juego["top1_prev"] and quiz_juego["top1_prev"] != top1_user:
+            extra_msg = f"\n\n¡Remontada de @{top1_user}! ٩(ˊᗜˋ*)o ♡"
+        elif top1_vic >= top2_vic + 2:
+            extra_msg = f"\n\nCuidado con @{top1_user}... ૮₍•᷄ ࡇ •᷅₎ა"
+    else:
+        if top1_vic >= 3:
+            extra_msg = f"\n\nCuidado con @{top1_user}... ૮₍•᷄ ࡇ •᷅₎ა"
+
+    quiz_juego["top1_prev"] = top1_user
+    bot.send_message(chat_id, msg_stats + extra_msg, message_thread_id=thread_id)
+
+@bot.message_handler(commands=['endquiz'])
+def endquiz(message):
+    try:
+        if bot.get_chat_member(message.chat.id, message.from_user.id).status in ['administrator', 'creator']:
+            quiz_juego["fase"] = "inactivo"
+            quiz_aciertos.clear()
+            quiz_juego["ganadores_orden"].clear()
+            quiz_juego["top1_prev"] = None
+            bot.send_message(message.chat.id, " (╥﹏╥) Quiz finalizado y tabla de clasificaciones reiniciada.", message_thread_id=get_thread_id(message))
+    except Exception:
+        pass
 
 # --- ARRANQUE ROBUSTO 24/7 EN RAILWAY ---
 if __name__ == '__main__':
