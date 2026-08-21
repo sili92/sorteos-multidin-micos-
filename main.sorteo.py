@@ -1,4 +1,3 @@
-import os
 import telebot
 from telebot import types
 import random
@@ -6,11 +5,7 @@ import threading
 import time
 import re
 
-TOKEN = os.getenv("BOT_TOKEN")
-
-if not TOKEN:
-    raise ValueError("No se ha encontrado la variable de entorno BOT_TOKEN")
-
+TOKEN = __import__("os").environ["TOKEN"]
 bot = telebot.TeleBot(TOKEN)
 
 # --- PACK DE STICKERS DE CHERRIEBOT ---
@@ -27,11 +22,13 @@ STICKERS_CHERRIE = [
 sorteos = {}
 puntos_sistema = {}          # {username: puntos_int}
 quiz_aciertos = {}           # {username: total_aciertos_int}
+mineria_historico = {}       # {username: puntos_acumulados_int} (Para /bestminers)
 
 quiz_juego = {
     "fase": "inactivo",
     "chat_id": None,
     "thread_id": None,
+    "admin_id": None,        # Exclusividad de admin
     "premio": "",
     "participantes": set(),
     "participantes_activos": set(),
@@ -48,6 +45,7 @@ mineria_juego = {
     "fase": "inactivo",
     "chat_id": None,
     "thread_id": None,
+    "admin_id": None,        # Exclusividad de admin
     "premio": "",
     "participantes": [],
     "puntos": {},
@@ -60,6 +58,7 @@ loteria_juego = {
     "fase": "inactivo",
     "chat_id": None,
     "thread_id": None,
+    "admin_id": None,        # Exclusividad de admin
     "premio": "",
     "tickets_vendidos": {},  # {ticket_code: username}
     "usuarios_registrados": set(),
@@ -79,17 +78,6 @@ def es_admin(chat_id, user_id):
         return status in ['administrator', 'creator']
     except Exception:
         return False
-
-# --- CAPTURA DE STICKERS ---
-@bot.message_handler(content_types=['sticker'])
-def capturar_sticker_id(message):
-    file_id = message.sticker.file_id
-    pack_name = message.sticker.set_name if message.sticker.set_name else "Desconocido"
-    bot.reply_to(
-        message, 
-        f"✦ Sticker capturado\n\nPack: `{pack_name}`\nFile ID:\n`{file_id}`", 
-        parse_mode="Markdown"
-    )
 
 # --- COMANDOS BÁSICOS ---
 @bot.message_handler(commands=['start'])
@@ -196,23 +184,35 @@ def cancelar_juego_activo(message):
     juego_cancelado = None
 
     if chat_id in sorteos and sorteos[chat_id]["activo"]:
+        if sorteos[chat_id]["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
         sorteos[chat_id]["activo"] = False
         juego_cancelado = "sorteo"
 
     if quiz_juego["fase"] != "inactivo":
+        if quiz_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
         quiz_juego["fase"] = "inactivo"
         juego_cancelado = "quiz de batalla"
 
     if mineria_juego["fase"] != "inactivo":
+        if mineria_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
         mineria_juego["fase"] = "inactivo"
         juego_cancelado = "minería"
 
     if loteria_juego["fase"] != "inactivo":
+        if loteria_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
         loteria_juego["fase"] = "inactivo"
         juego_cancelado = "lotería"
 
     if juego_cancelado:
-        texto = f"ㅤ ୨୧ ࣪ ׅ ㅤla partida de {juego_cancelado} fue cancelada por un admin. ૮ ˶• ˔ •˶ ა"
+        texto = f"ㅤ ୨୧ ࣪ ׅ ㅤla partida de {juego_cancelado} fue cancelada por su admin. ૮ ˶• ˔ •˶ ა"
         bot.send_message(chat_id, texto, message_thread_id=thread_id)
     else:
         bot.send_message(chat_id, " (╥﹏╥)  no hay ninguna partida activa para cancelar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
@@ -263,6 +263,10 @@ def crear_sorteo(message):
         bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar un sorteo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
+    if chat_id in sorteos and sorteos[chat_id].get("activo"):
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay un sorteo en curso.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
     raw_text = message.text
     premio, segundos_duracion, num_ganadores = parsear_comando_sorteo(raw_text)
 
@@ -274,6 +278,7 @@ def crear_sorteo(message):
     minutos_iniciales = max(1, segundos_duracion // 60) if segundos_duracion > 0 else 0
 
     sorteos[chat_id] = {
+        "admin_id": user_id,
         "premio": premio,
         "participantes": set(),
         "mensaje_id": None,
@@ -353,6 +358,10 @@ def finalizar_sorteo(message):
         bot.send_message(chat_id, " (╥﹏╥)  no hay ningún sorteo activo en este chat.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
+    if sorteos[chat_id]["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
     ejecutar_fin_sorteo(chat_id)
 
 @bot.message_handler(commands=['resorteo'])
@@ -366,6 +375,10 @@ def resortear(message):
 
     if chat_id not in sorteos or not sorteos[chat_id]["participantes"]:
         bot.send_message(chat_id, " (╥﹏╥)  no hay un sorteo reciente con participantes para volver a sortear.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if sorteos[chat_id]["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     datos = sorteos[chat_id]
@@ -409,7 +422,7 @@ hilo_monitor = threading.Thread(target=monitor_sorteos)
 hilo_monitor.daemon = True
 hilo_monitor.start()
 
-# --- BANCO COMPLETO DE PREGUNTAS (MÁS DE 30 PREGUNTAS) ---
+# --- BANCO COMPLETO DE PREGUNTAS ---
 BANCO_PREGUNTAS = [
     {"p": "¿cuál es el río más largo del mundo?", "o": ["Amazonas", "Nilo", "Misisipi", "Yangtsé"], "c": 0},
     {"p": "¿en qué año llegó el hombre a la luna?", "o": ["1965", "1969", "1972", "1959"], "c": 1},
@@ -516,6 +529,7 @@ def crear_lobby_quiz(message):
     quiz_juego["fase"] = "lobby"
     quiz_juego["chat_id"] = chat_id
     quiz_juego["thread_id"] = thread_id
+    quiz_juego["admin_id"] = user_id
     quiz_juego["premio"] = premio
     quiz_juego["participantes"].clear()
     quiz_juego["participantes_activos"].clear()
@@ -560,6 +574,10 @@ def iniciar_partida_quiz(message):
 
     if quiz_juego["fase"] != "lobby":
         bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby esperando para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if quiz_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if len(quiz_juego["participantes"]) < 2:
@@ -665,11 +683,15 @@ def evaluar_resultados_ronda(chat_id):
         else:
             eliminados_ronda.add(p)
 
-    if len(quiz_juego["participantes_activos"]) == 2 and len(acertaron) == 2:
-        acertaron.sort(key=lambda x: x[1])
+    es_ultima_ronda_2p = (len(quiz_juego["participantes_activos"]) == 2)
+    mensaje_eliminacion_especial = ""
+
+    if es_ultima_ronda_2p and len(acertaron) == 2:
+        acertaron.sort(key=lambda x: x[1])  # Ordenar por tiempo (el más rápido primero)
         mas_lento = acertaron[1][0]
         eliminados_ronda.add(mas_lento)
         sobrevivientes_ronda = {acertaron[0][0]}
+        mensaje_eliminacion_especial = f"¡todos acertaron! pero @{mas_lento}, al ser el último en responder, quedó descalificado."
     else:
         sobrevivientes_ronda = {p for p, t in acertaron}
 
@@ -681,13 +703,21 @@ def evaluar_resultados_ronda(chat_id):
         )
     else:
         quiz_juego["participantes_activos"] = sobrevivientes_ronda
-        str_eliminados = ", ".join([f"@{e}" for e in eliminados_ronda]) if eliminados_ronda else "Nadie"
-        texto_resumen = (
-            " (๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
-            f"𓂃   La respuesta correcta era  :  **{texto_correcta}**\n\n"
-            f"𓂃   Eliminados / AFK  :  {str_eliminados}\n"
-            f"𓂃   Sobrevivientes  :  {len(sobrevivientes_ronda)}"
-        )
+        
+        if mensaje_eliminacion_especial:
+            texto_resumen = (
+                " (๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
+                f"𓂃   La respuesta correcta era  :  **{texto_correcta}**\n\n"
+                f"✦   {mensaje_eliminacion_especial}"
+            )
+        else:
+            str_eliminados = ", ".join([f"@{e}" for e in eliminados_ronda]) if eliminados_ronda else "Nadie"
+            texto_resumen = (
+                " (๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
+                f"𓂃   La respuesta correcta era  :  **{texto_correcta}**\n\n"
+                f"𓂃   Eliminados / AFK  :  {str_eliminados}\n"
+                f"𓂃   Sobrevivientes  :  {len(sobrevivientes_ronda)}"
+            )
 
     bot.send_message(chat_id, texto_resumen, parse_mode="Markdown", message_thread_id=thread_id)
 
@@ -775,6 +805,7 @@ def crear_lobby_mineria(message):
     mineria_juego["fase"] = "lobby"
     mineria_juego["chat_id"] = chat_id
     mineria_juego["thread_id"] = thread_id
+    mineria_juego["admin_id"] = user_id
     mineria_juego["premio"] = premio
     mineria_juego["participantes"].clear()
     mineria_juego["puntos"].clear()
@@ -823,6 +854,10 @@ def iniciar_partida_mineria(message):
         bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby esperando para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
+    if mineria_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
     if not mineria_juego["participantes"]:
         bot.send_message(chat_id, " (╥﹏╥)  se necesita al menos 1 participante para comenzar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
@@ -868,6 +903,7 @@ def realizar_accion_minar(message):
     resultado = random.choices(OPCIONES_MINERIA, weights=pesos, k=1)[0]
 
     mineria_juego["puntos"][username] += resultado["puntos"]
+    mineria_historico[username] = mineria_historico.get(username, 0) + resultado["puntos"]
     mineria_juego["turnos_restantes"][username] -= 1
 
     texto_resultado = f"✦ @{username}, encontraste...\n\n{resultado['texto']}"
@@ -896,13 +932,13 @@ def avanzar_turno_mineria():
 def ver_top_mineria(message):
     thread_id = get_thread_id(message)
 
-    if not mineria_juego["puntos"]:
-        bot.send_message(message.chat.id, " (╥﹏╥)  no hay ningún registro de minería activo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+    if not mineria_historico:
+        bot.send_message(message.chat.id, " (╥﹏╥)  no hay ningún registro histórico de minería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    ordenados = sorted(mineria_juego["puntos"].items(), key=lambda x: x[1], reverse=True)
-    lineas = [f"✦ @{u} — {pts} puntos." for u, pts in ordenados]
-    texto = "      ‿︵       𝘉𝘦𝘴𝘵 𝘔𝘪𝘯𝘦𝘳𝘴 !\n\n" + "\n".join(lineas)
+    ordenados = sorted(mineria_historico.items(), key=lambda x: x[1], reverse=True)
+    lineas = [f"{idx:02d}. @{u} — {pts} pts" for idx, (u, pts) in enumerate(ordenados, start=1)]
+    texto = "      ‿︵       𝘉𝘦𝘴𝘵 𝘔𝘪𝘯𝘦𝘳𝘴 (Historico) !\n\n" + "\n".join(lineas)
     bot.send_message(message.chat.id, texto, message_thread_id=thread_id)
 
 def finalizar_juego_mineria():
@@ -942,6 +978,10 @@ def terminar_mineria_manual(message):
         bot.send_message(chat_id, " (╥﹏╥)  no hay ninguna minería activa.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
+    if mineria_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
     finalizar_juego_mineria()
 
 # --- JUEGO DE LOTERÍA ---
@@ -954,6 +994,10 @@ def iniciar_loteria(message):
         bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar la lotería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
+    if loteria_juego["fase"] != "inactivo":
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay una lotería activa.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
     premio = message.text[8:].strip()
     if not premio:
         bot.send_message(chat_id, "✦ ¡recuerda! debes especificar el premio. Ejemplo: /loteria 15 robux", message_thread_id=thread_id, reply_to_message_id=message.message_id)
@@ -962,6 +1006,7 @@ def iniciar_loteria(message):
     loteria_juego["fase"] = "comprando"
     loteria_juego["chat_id"] = chat_id
     loteria_juego["thread_id"] = thread_id
+    loteria_juego["admin_id"] = user_id
     loteria_juego["premio"] = premio
     loteria_juego["tickets_vendidos"].clear()
     loteria_juego["usuarios_registrados"].clear()
@@ -1012,6 +1057,10 @@ def jugar_loteria(message):
 
     if loteria_juego["fase"] != "comprando" or not loteria_juego["tickets_vendidos"]:
         bot.send_message(chat_id, " (╥﹏╥)  no hay tickets vendidos para realizar el sorteo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if loteria_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     ticket_ganador, dueno = random.choice(list(loteria_juego["tickets_vendidos"].items()))
@@ -1100,21 +1149,19 @@ def ver_cartilla_puntos(message):
         return
 
     ordenados = sorted(puntos_sistema.items(), key=lambda x: x[1], reverse=True)
+    
     lineas_top = []
-    for idx, (user, pts) in enumerate(ordenados[:10], start=1):
+    for idx, (user, pts) in enumerate(ordenados, start=1):
         lineas_top.append(f"{idx:02d}  ;  @{user} ({pts} pts)")
 
-    while len(lineas_top) < 10:
-        idx = len(lineas_top) + 1
-        lineas_top.append(f"{idx:02d}  ;")
-
     top_texto = "\n".join(lineas_top)
-    total_puntos = sum(puntos_sistema.values())
+    
+    total_a_pagar = sum(pts for pts in puntos_sistema.values() if pts > 0)
 
     cartilla = (
         "  丙        ◟     point list.           𝆬          \n\n"
         f"{top_texto}\n\n"
-        f"   ୨୧        𝅄     total   ;    {total_puntos}"
+        f"   ୨୧        𝅄     total   ;    {total_a_pagar}"
     )
     bot.send_message(message.chat.id, cartilla, message_thread_id=thread_id)
 
