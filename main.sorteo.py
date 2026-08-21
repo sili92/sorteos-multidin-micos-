@@ -152,9 +152,9 @@ def suplicar_robux(message):
         target_id = target_user.id
         target_name = target_user.first_name
         target_mencion = f'<a href="tg://user?id={target_id}">{target_name}</a>'
-        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} le está suplicando a {target_mencion} por robux...ㅤ"
+        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} que usó beg está suplicando a {target_mencion} por robux...ㅤ"
     else:
-        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} suplica por robux...ㅤ"
+        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} que usó beg está suplicando por robux...ㅤ"
 
     bot.send_message(
         chat_id, 
@@ -227,7 +227,7 @@ def generar_texto_sorteo(premio, minutos_restantes=0, ganadores=1):
         "ㅤᡣ𐭩ㅤㅤpresiona el botón para unirte."
     )
 
-def generar_texto_resultados(premio, ganador_str, admin_user="kirschteiinz"):
+def generar_texto_resultados(premio, ganador_str, admin_user):
     return (
         "ㅤㅤㅤㅤㅤ୭ৎ ࣪ ׅ ㅤ¡Resultados!ㅤ\n\n"
         f"𓂃   premio  :  {premio}\n"
@@ -277,8 +277,11 @@ def crear_sorteo(message):
     tiempo_finalizacion = time.time() + segundos_duracion if segundos_duracion > 0 else None
     minutos_iniciales = max(1, segundos_duracion // 60) if segundos_duracion > 0 else 0
 
+    admin_username = message.from_user.username if message.from_user.username else message.from_user.first_name
+
     sorteos[chat_id] = {
         "admin_id": user_id,
+        "admin_username": admin_username,
         "premio": premio,
         "participantes": set(),
         "mensaje_id": None,
@@ -342,7 +345,7 @@ def ejecutar_fin_sorteo(chat_id):
     datos["ganadores_anteriores"].extend(ganadores)
 
     str_ganadores = ", ".join([f"@{g}" for g in ganadores])
-    texto_ganador = generar_texto_resultados(datos["premio"], str_ganadores)
+    texto_ganador = generar_texto_resultados(datos["premio"], str_ganadores, datos["admin_username"])
     bot.send_message(chat_id, texto_ganador, message_thread_id=thread_id)
 
 @bot.message_handler(commands=['endsorteo'])
@@ -394,7 +397,7 @@ def resortear(message):
     nuevo_ganador = random.choice(elegibles)
     datos["ganadores_anteriores"].append(nuevo_ganador)
 
-    texto_nuevo_ganador = generar_texto_resultados(datos["premio"], f"@{nuevo_ganador}")
+    texto_nuevo_ganador = generar_texto_resultados(datos["premio"], f"@{nuevo_ganador}", datos["admin_username"])
     bot.send_message(chat_id, texto_nuevo_ganador, message_thread_id=thread_id)
 
 def monitor_sorteos():
@@ -1181,7 +1184,7 @@ def reiniciar_puntos(message):
 @bot.message_handler(func=lambda message: message.text and message.text.startswith('/') and message.text.split()[0] not in [
     '/start', '/help', '/sorteo', '/endsorteo', '/resorteo', '/quiz', '/quizstart', '/endquiz', '/quizlegends', 
     '/mineria', '/mineriastart', '/minar', '/bestminers', '/endmineria', '/add', '/rest', '/check', '/clear',
-    '/cancelar', '/beg', '/loteria', '/tickets', '/jugarloteria', '/questions', '/comandos'
+    '/cancelar', '/beg', '/loteria', '/tickets', '/jugarloteria', '/questions', '/comandos', '/refe'
 ])
 def manejar_comandos_invalidos(message):
     chat_id, user_id = message.chat.id, message.from_user.id
