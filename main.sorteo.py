@@ -487,7 +487,7 @@ BANCO_PREGUNTAS = [
 def ver_todas_las_preguntas(message):
     username = message.from_user.username
     if message.chat.type == 'private' and username and username.lower() == 'kirschteiinz':
-        texto = "      ‿︵       𝘉𝘢𝘯𝘤𝘰 𝘥𝘦 𝘗𝘳𝘦𝘨𝘶𝘯𝘵𝘢𝘴   Cherrie !\n\n"
+        texto = "      ‿︵       𝘏𝘢𝘯𝘤𝘰 𝘥𝘦 𝘗𝘳𝘦𝘨𝘶𝘯𝘵𝘢𝘴   Cherrie !\n\n"
         for idx, q in enumerate(BANCO_PREGUNTAS, start=1):
             texto += f"**{idx}. {q['p']}**\n"
             for o_idx, opcion in enumerate(q['o']):
