@@ -152,7 +152,7 @@ def suplicar_robux(message):
         target_id = target_user.id
         target_name = target_user.first_name
         target_mencion = f'<a href="tg://user?id={target_id}">{target_name}</a>'
-        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} que usó beg está suplicando a {target_mencion} por robux...ㅤ"
+        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} está suplicando a {target_mencion} por robux...ㅤ"
     else:
         texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{mencion_nickname} que usó beg está suplicando por robux...ㅤ"
 
