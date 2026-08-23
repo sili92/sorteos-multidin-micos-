@@ -228,7 +228,7 @@ def ver_puntos(message):
 
     ordenados = sorted(puntos_sistema.items(), key=lambda x: x[1], reverse=True)
     lineas = [f"{idx:02d}. @{u} — {pts} pts" for idx, (u, pts) in enumerate(ordenados, start=1)]
-    texto = "      ‿︵       𝘊𝘢𝘳𝘵𝘪𝘭𝘭𝘢 𝘥𝘦 𝘗𝘶𝘯𝘵𝘰𝘴 !\n\n" + "\n".join(lineas)
+    texto = "      ‿︵       𝘘𝘶𝘪𝘻 𝘘𝘶𝘪𝘻 𝘋𝘦 𝘗𝘶𝘯𝘵𝘰𝘴 !\n\n" + "\n".join(lineas)
     bot.send_message(message.chat.id, texto, message_thread_id=thread_id)
 
 @bot.message_handler(commands=['clear'])
@@ -1336,9 +1336,9 @@ def recibir_apuesta_redpink(message):
     redpink_juego["elecciones"][username] = comando
 
     if comando == 'red':
-        bot.send_message(chat_id, " quienes usaron /red:   ⸜(ˊᗜˋ)⸝  ¡ℬuena elección! eres team red.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " ⸜(ˊᗜˋ)⸝  ¡ℬuena elección! eres team red.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
     elif comando == 'pink':
-        bot.send_message(chat_id, " quienes usaron /pink:  ⸜(ˊᗜˋ)⸝  ¡ℬuena elección! eres team pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " ⸜(ˊᗜˋ)⸝  ¡ℬuena elección! eres team pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
 
 @bot.message_handler(commands=['redpinknow'])
 def resolver_redpink(message):
@@ -1403,7 +1403,7 @@ def resolver_redpink(message):
         bot.send_message(chat_id, msg_res, message_thread_id=thread_id)
 
 # --- JUEGO CARRERA ANÓNIMA ---
-def renderizar_carrera(posiciones, emojis_asignados, meta=40, finalizado=False):
+def renderizar_carrera(posiciones, emojis_asignados, meta=12, finalizado=False):
     lineas = ["ㅤㅤㅤㅤ ㅤㅤㅤㅤ¡  𝗰︩︪ׄorran  !"]
     for u in carrera_juego["participantes"]:
         emoji = emojis_asignados[u]
@@ -1412,7 +1412,7 @@ def renderizar_carrera(posiciones, emojis_asignados, meta=40, finalizado=False):
         puntos_antes = " ·" * min(pos, meta)
         puntos_despues = " ·" * max(0, meta - pos)
         
-        linea = f"{emoji}{puntos_antes} 🏁" if pos >= meta else f"{emoji}{puntos_antes}{puntos_despues} 🏁"
+        linea = f"{puntos_antes}{emoji}{puntos_despues} 🏁"
         lineas.append(linea)
 
     if finalizado:
@@ -1503,6 +1503,10 @@ def iniciar_carrera(message):
 
     carrera_juego["fase"] = "corriendo"
 
+    # Mezclar orden de participantes para romper el orden en que se unieron
+    random.shuffle(carrera_juego["participantes"])
+
+    # Asignar emojis aleatorios de forma totalmente secreta
     emojis_mezclados = random.sample(EMOJIS_CARRERA, len(carrera_juego["participantes"]))
     for i, p in enumerate(carrera_juego["participantes"]):
         carrera_juego["emojis_asignados"][p] = emojis_mezclados[i]
@@ -1521,7 +1525,7 @@ def iniciar_carrera(message):
     hilo_carrera.start()
 
 def bucle_animacion_carrera(chat_id, thread_id):
-    meta = 25
+    meta = 12
     texto_inicial = renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta=meta)
     
     msg = bot.send_message(chat_id, texto_inicial, message_thread_id=thread_id)
@@ -1530,11 +1534,11 @@ def bucle_animacion_carrera(chat_id, thread_id):
     ganador = None
 
     while True:
-        time.sleep(3.5)
+        time.sleep(1.2) # Intervalo dinámico para animación fluida
 
         avances = {}
         for p in carrera_juego["participantes"]:
-            avances[p] = random.choice([0, 1, 2, 3, 4])
+            avances[p] = random.choice([1, 2])
 
         candidatos_meta = []
         for p in carrera_juego["participantes"]:
@@ -1578,7 +1582,7 @@ def bucle_animacion_carrera(chat_id, thread_id):
         message_thread_id=thread_id
     )
 
-    time.sleep(6.5)
+    time.sleep(4.0)
 
     lineas_revelacion = ["ㅤㅤꔫ      ℛevelando identidades...\n"]
     lineas_revelacion.append(f" ᜊ   ¡𝐆̸anador! {emoji_ganador} — @{ganador}")
