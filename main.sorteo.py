@@ -14,8 +14,6 @@ ADMINS_PERMITIDOS = set()
 SUPER_ADMIN = "kirschteiinz"  # Usuario de telegram autorizado sin @
 
 def es_admin(chat_id, user_id):
-    # Solamente los IDs dentro de ADMINS_PERMITIDOS (agregados vía /admin ID)
-    # tienen privilegios de inicio/gestión de juegos.
     return user_id in ADMINS_PERMITIDOS
 
 # --- PACK DE STICKERS DE CHERRIEBOT ---
@@ -986,24 +984,14 @@ def crear_cherrybomb(message):
     cherrybomb_juego["podridas_monto"].clear()
     cherrybomb_juego["elecciones_privadas"].clear()
 
-    if modo == "admin":
-        texto_lobby = (
-            "ㅤꔫ    ㅤ  𝕷̲obby de cherry bomb iniciado.  \n\n"
-            "ㅤᨳㅤhay un tablero de dulces cerezas frente a tí, ¡sé cuidadoso al escoger una para comer! podría explotar inesperadamente, mucha suerte.\n\n"
-            "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
-            "        ⊹    (esperando...)\n\n"
-            "₍˄..˄₎꠹     presiona el botón para poder elegir tus cerecitas...\n"
-            "admin, puedes colocar /cherrybombstart para dar inicio a la partida."
-        )
-    else:
-        texto_lobby = (
-            "ㅤꔫ    ㅤ  𝕷̲obby de cherry bomb iniciado.  \n\n"
-            "ㅤᨳㅤhay un tablero de dulces cerezas frente a tí, ¡sé cuidadoso al escoger una para comer! podría explotar inesperadamente, mucha suerte.\n\n"
-            "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
-            "        ⊹    (esperando...)\n\n"
-            "₍˄..˄₎꠹     presiona el botón para poder elegir tus cerecitas...\n"
-            "admin, puedes colocar /cherrybombstart para dar inicio a la partida."
-        )
+    texto_lobby = (
+        "ㅤꔫ    ㅤ  𝕷̲obby de cherry bomb iniciado.  \n\n"
+        "ㅤᨳㅤhay un tablero de dulces cerezas frente a tí, ¡sé cuidadoso al escoger una para comer! podría explotar inesperadamente, mucha suerte.\n\n"
+        "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
+        "        ⊹    (esperando...)\n\n"
+        "₍˄..˄₎꠹     presiona el botón para poder elegir tus cerecitas...\n"
+        "admin, puedes colocar /cherrybombstart para dar inicio a la partida."
+    )
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("   ⊹  JOIN!    ", callback_data="unirse_cherrybomb_lobby"))
@@ -1285,7 +1273,6 @@ def comer_cereza(message):
         if len(cherrybomb_juego["participantes_activos"]) <= 1:
             finalizar_cherrybomb()
         else:
-            # REINICIO COMPLETO DEL TABLERO TRAS LA EXPLOSIÓN
             cherrybomb_juego["tablero"] = {i: "sana" for i in range(1, 26)}
             cherrybomb_juego["podridas_monto"].clear()
 
@@ -1767,7 +1754,6 @@ def recibir_apuesta_redpink(message):
     if username not in redpink_juego["participantes"]:
         return
 
-    # Si ya eligió anteriormente, NO se le permite cambiar de opinión
     if username in redpink_juego["elecciones"]:
         bot.send_message(chat_id, f" (╥﹏╥)  @{username}, ya elegiste {redpink_juego['elecciones'][username]} y no puedes cambiar tu elección.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
@@ -1795,7 +1781,6 @@ def resolver_redpink(message):
         bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    # Sorteo de apuestas aleatorias para quienes no hayan elegido antes de ejecutar /redpinknow
     for p in redpink_juego["participantes"]:
         if p not in redpink_juego["elecciones"]:
             redpink_juego["elecciones"][p] = random.choice(["red", "pink"])
@@ -1829,7 +1814,6 @@ def resolver_redpink(message):
     bot.send_message(chat_id, msg_res, message_thread_id=thread_id)
 
 # --- JUEGO CARRERA ANÓNIMA ---
-# Se actualiza la meta por defecto a 23 (5 puntos más larga)
 def renderizar_carrera(posiciones, emojis_asignados, meta=23, finalizado=False):
     lineas = ["ㅤㅤㅤㅤ ㅤㅤㅤㅤ¡  𝗰︩︪orran  !"]
     for u in carrera_juego["participantes"]:
@@ -1931,56 +1915,62 @@ def iniciar_carrera(message):
     carrera_juego["fase"] = "jugando"
     emojis_shuffled = random.sample(EMOJIS_CARRERA, len(carrera_juego["participantes"]))
     
-    for idx, u in enumerate(carrera_juego["participantes"]):
-        carrera_juego["emojis_asignados"][u] = emojis_shuffled[idx]
-        carrera_juego["posiciones"][u] = 0
+    for idx, user_p in enumerate(carrera_juego["participantes"]):
+        carrera_juego["emojis_asignados"][user_p] = emojis_shuffled[idx]
+        carrera_juego["posiciones"][user_p] = 0
 
-    msg = bot.send_message(chat_id, renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"]), message_thread_id=thread_id)
-    carrera_juego["msg_carrera_id"] = msg.message_id
-
-    hilo_carrera = threading.Thread(target=bucle_carrera, args=(chat_id, thread_id))
+    hilo_carrera = threading.Thread(target=bucle_carrera_anonima, args=(chat_id, thread_id))
     hilo_carrera.daemon = True
     hilo_carrera.start()
 
-def bucle_carrera(chat_id, thread_id):
+def bucle_carrera_anonima(chat_id, thread_id):
     meta = 23
-    ganador = None
+    msg = bot.send_message(chat_id, renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta), message_thread_id=thread_id)
+    carrera_juego["msg_carrera_id"] = msg.message_id
 
+    ganadores = []
+    
     while carrera_juego["fase"] == "jugando":
-        time.sleep(2)
-        
-        avanzado = False
-        for u in carrera_juego["participantes"]:
-            pasos = random.choice([1, 2, 3])
-            carrera_juego["posiciones"][u] += pasos
-            if carrera_juego["posiciones"][u] >= meta:
-                ganador = u
-                carrera_juego["fase"] = "finalizado"
-                break
-
-        try:
-            bot.edit_message_text(
-                renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta=meta, finalizado=(ganador is not None)),
-                chat_id,
-                carrera_juego["msg_carrera_id"]
-            )
-        except Exception:
-            pass
-
-        if ganador:
+        time.sleep(3)
+        if carrera_juego["fase"] != "jugando":
             break
 
-    if ganador:
-        registrar_victoria(ganador)
-        emoji_win = carrera_juego["emojis_asignados"][ganador]
-        texto_win = (
-            f" ⸜(ˊᗜˋ*)⸝  ¡@{ganador} ({emoji_win}) ha ganado la carrera anónima! felicidades ♡, te llevas {carrera_juego['premio']}."
-        )
-        bot.send_message(chat_id, texto_win, message_thread_id=thread_id)
+        # Avanza posiciones aleatoriamente entre 1 y 3 pasos
+        for u in carrera_juego["participantes"]:
+            pasos = random.randint(1, 3)
+            carrera_juego["posiciones"][u] += pasos
+            if carrera_juego["posiciones"][u] >= meta:
+                ganadores.append(u)
 
-    carrera_juego["fase"] = "inactivo"
+        if ganadores:
+            carrera_juego["fase"] = "inactivo"
+            try:
+                bot.edit_message_text(renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta, finalizado=True), chat_id, carrera_juego["msg_carrera_id"])
+            except Exception:
+                pass
+            
+            ganador = ganadores[0]
+            registrar_victoria(ganador)
+            emoji_ganador = carrera_juego["emojis_asignados"][ganador]
+            
+            revelacion = "\n".join([f"        ⊹    @{u}  :  {carrera_juego['emojis_asignados'][u]}" for u in carrera_juego["participantes"]])
+            
+            texto_fin = (
+                f"   ⎯        ¡la carrera ha terminado!  ♡\n\n"
+                f"   (๑´`๑)     ganador : @{ganador} ({emoji_ganador})\n"
+                f"premio obtenido : {carrera_juego['premio']}\n\n"
+                "  ⎯        revelación de emojis :\n"
+                f"{revelacion}"
+            )
+            bot.send_message(chat_id, texto_fin, message_thread_id=thread_id)
+            break
+        else:
+            try:
+                bot.edit_message_text(renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta), chat_id, carrera_juego["msg_carrera_id"])
+            except Exception:
+                pass
 
-# --- INICIO DEL BOT ---
-if __name__ == '__main__':
-    print("Bot Cherrie en ejecución...")
-    bot.infinity_polling()
+# --- INICIALIZACIÓN DEL BOT ---
+if __name__ == "__main__":
+    print("CherrieBot está corriendo correctamente...")
+    bot.infinity_polling(skip_pending=True)
