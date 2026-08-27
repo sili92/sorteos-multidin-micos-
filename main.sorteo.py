@@ -9,9 +9,28 @@ import os
 TOKEN = os.environ["TOKEN"]
 bot = telebot.TeleBot(TOKEN)
 
-# --- CONFIGURACIÓN DE PERMISOS GLOBAL ---
+# --- CONFIGURACIÓN Y PERSISTENCIA DE PERMISOS GLOBAL ---
+ADMINS_FILE = "admins.txt"
 ADMINS_PERMITIDOS = set()
 SUPER_ADMIN = "kirschteiinz"  # Usuario de telegram autorizado sin @
+
+def cargar_admins():
+    """Carga los IDs de administradores guardados de forma permanente."""
+    if os.path.exists(ADMINS_FILE):
+        with open(ADMINS_FILE, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line.isdigit():
+                    ADMINS_PERMITIDOS.add(int(line))
+
+def guardar_admins():
+    """Guarda de forma permanente la lista actual de administradores."""
+    with open(ADMINS_FILE, "w") as f:
+        for admin_id in ADMINS_PERMITIDOS:
+            f.write(f"{admin_id}\n")
+
+# Cargar admins al iniciar la aplicación
+cargar_admins()
 
 def es_admin(chat_id, user_id):
     return user_id in ADMINS_PERMITIDOS
@@ -144,9 +163,57 @@ def agregar_admin_por_id(message):
     try:
         user_id_add = int(args[1].replace('+', '').strip())
         ADMINS_PERMITIDOS.add(user_id_add)
+        guardar_admins()
         bot.send_message(message.chat.id, f"ㅤ♡ㅤ¡Usuario {user_id_add} agregado a la lista de admins autorizados!")
     except ValueError:
         bot.send_message(message.chat.id, "✦ ID no válida. Asegúrate de colocar un ID numérico entero.")
+
+@bot.message_handler(commands=['unadmin'])
+def quitar_admin_por_id(message):
+    username = message.from_user.username
+    if not username or username.lower() != SUPER_ADMIN.lower():
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        bot.send_message(message.chat.id, "✦ Estructura incorrecta. Uso: /unadmin + [ID_del_usuario]")
+        return
+
+    try:
+        user_id_remove = int(args[1].replace('+', '').strip())
+        if user_id_remove in ADMINS_PERMITIDOS:
+            ADMINS_PERMITIDOS.remove(user_id_remove)
+            guardar_admins()
+            bot.send_message(message.chat.id, f"✦ El usuario {user_id_remove} ha sido removido de la lista de administradores.")
+        else:
+            bot.send_message(message.chat.id, f" (╥﹏╥)  El usuario {user_id_remove} no se encuentra en la lista de admins.")
+    except ValueError:
+        bot.send_message(message.chat.id, "✦ ID no válida. Asegúrate de colocar un ID numérico entero.")
+
+@bot.message_handler(commands=['admins'])
+def listar_administradores(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin autorizado, no puedes usar este comando.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if not ADMINS_PERMITIDOS:
+        bot.send_message(chat_id, " (╥﹏╥)  no hay administradores registrados actualmente.", message_thread_id=thread_id)
+        return
+
+    lineas = []
+    for uid in list(ADMINS_PERMITIDOS):
+        try:
+            user_chat = bot.get_chat(uid)
+            u_name = f"@{user_chat.username}" if user_chat.username else user_chat.first_name
+        except Exception:
+            u_name = "Desconocido"
+        lineas.append(f"✦ ID: `{uid}` — {u_name}")
+
+    texto = "      ‿︵       𝘈𝘥𝘮𝘪𝘯𝘪𝘴𝘵𝘳𝘢𝘥𝘰𝘳𝘦𝘴 𝘈𝘶𝘵𝘰𝘳𝘪𝘻𝘢𝘥𝘰𝘴 !\n\n" + "\n".join(lineas)
+    bot.send_message(chat_id, texto, parse_mode="Markdown", message_thread_id=thread_id)
 
 # --- COMANDOS BÁSICOS Y LISTA GENERAL ---
 @bot.message_handler(commands=['start'])
@@ -204,6 +271,8 @@ def mostrar_comandos(message):
         "✦ /carrera [premio] 𓂃 Abre la carrera anónima.\n"
         "✦ /carrerastart 𓂃 Da inicio a la carrera.\n"
         "✦ /wins 𓂃 Muestra las victorias acumuladas de todos los usuarios.\n"
+        "✦ /admins 𓂃 Muestra la lista de administradores autorizados.\n"
+        "✦ /unadmin [ID] 𓂃 Remueve el privilegio de admin a una ID.\n"
         "✦ /add @usuario [monto] 𓂃 Añade puntos a la cartilla.\n"
         "✦ /rest @usuario [monto] 𓂃 Resta puntos a un usuario.\n"
         "✦ /check 𓂃 Muestra la cartilla de puntos.\n"
@@ -984,14 +1053,24 @@ def crear_cherrybomb(message):
     cherrybomb_juego["podridas_monto"].clear()
     cherrybomb_juego["elecciones_privadas"].clear()
 
-    texto_lobby = (
-        "ㅤꔫ    ㅤ  𝕷̲obby de cherry bomb iniciado.  \n\n"
-        "ㅤᨳㅤhay un tablero de dulces cerezas frente a tí, ¡sé cuidadoso al escoger una para comer! podría explotar inesperadamente, mucha suerte.\n\n"
-        "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
-        "        ⊹    (esperando...)\n\n"
-        "₍˄..˄₎꠹     presiona el botón para poder elegir tus cerecitas...\n"
-        "admin, puedes colocar /cherrybombstart para dar inicio a la partida."
-    )
+    if modo == "admin":
+        texto_lobby = (
+            "ㅤꔫ    ㅤ  𝕷̲obby de cherry bomb iniciado.  \n\n"
+            "ㅤᨳㅤhay un tablero de dulces cerezas frente a tí, ¡sé cuidadoso al escoger una para comer! podría explotar inesperadamente, mucha suerte.\n\n"
+            "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
+            "        ⊹    (esperando...)\n\n"
+            "₍˄..˄₎꠹     presiona el botón para poder elegir tus cerecitas...\n"
+            "admin, puedes colocar /cherrybombstart para dar inicio a la partida."
+        )
+    else:
+        texto_lobby = (
+            "ㅤꔫ    ㅤ  𝕷̲obby de cherry bomb iniciado.  \n\n"
+            "ㅤᨳㅤhay un tablero de dulces cerezas frente a tí, ¡sé cuidadoso al escoger una para comer! podría explotar inesperadamente, mucha suerte.\n\n"
+            "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
+            "        ⊹    (esperando...)\n\n"
+            "₍˄..˄₎꠹     presiona el botón para poder elegir tus cerecitas...\n"
+            "admin, puedes colocar /cherrybombstart para dar inicio a la partida."
+        )
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("   ⊹  JOIN!    ", callback_data="unirse_cherrybomb_lobby"))
@@ -1273,6 +1352,7 @@ def comer_cereza(message):
         if len(cherrybomb_juego["participantes_activos"]) <= 1:
             finalizar_cherrybomb()
         else:
+            # REINICIO COMPLETO DEL TABLERO TRAS LA EXPLOSIÓN
             cherrybomb_juego["tablero"] = {i: "sana" for i in range(1, 26)}
             cherrybomb_juego["podridas_monto"].clear()
 
@@ -1741,7 +1821,7 @@ def iniciar_redpink(message):
     )
     bot.send_message(chat_id, texto, message_thread_id=thread_id)
 
-@bot.message_handler(func=lambda m: m.text and (m.text.split()[0].lower().startswith('/red') or m.text.split()[0].lower().startswith('/pink')))
+@bot.message_handler(func=lambda m: m.text and not m.text.split()[0].lower().startswith('/redpinknow') and (m.text.split()[0].lower().startswith('/red') or m.text.split()[0].lower().startswith('/pink')))
 def recibir_apuesta_redpink(message):
     chat_id = message.chat.id
     thread_id = get_thread_id(message)
@@ -1754,6 +1834,7 @@ def recibir_apuesta_redpink(message):
     if username not in redpink_juego["participantes"]:
         return
 
+    # Si ya eligió anteriormente, NO se le permite cambiar de opinión
     if username in redpink_juego["elecciones"]:
         bot.send_message(chat_id, f" (╥﹏╥)  @{username}, ya elegiste {redpink_juego['elecciones'][username]} y no puedes cambiar tu elección.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
@@ -1781,6 +1862,7 @@ def resolver_redpink(message):
         bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
+    # Sorteo de apuestas aleatorias para quienes no hayan elegido antes de ejecutar /redpinknow
     for p in redpink_juego["participantes"]:
         if p not in redpink_juego["elecciones"]:
             redpink_juego["elecciones"][p] = random.choice(["red", "pink"])
@@ -1901,7 +1983,7 @@ def iniciar_carrera(message):
         return
 
     if carrera_juego["fase"] != "lobby":
-        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby activo para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby activo de carrera.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if carrera_juego["admin_id"] != user_id:
@@ -1913,64 +1995,57 @@ def iniciar_carrera(message):
         return
 
     carrera_juego["fase"] = "jugando"
-    emojis_shuffled = random.sample(EMOJIS_CARRERA, len(carrera_juego["participantes"]))
-    
-    for idx, user_p in enumerate(carrera_juego["participantes"]):
-        carrera_juego["emojis_asignados"][user_p] = emojis_shuffled[idx]
-        carrera_juego["posiciones"][user_p] = 0
+    emojis_disponibles = list(EMOJIS_CARRERA)
+    random.shuffle(emojis_disponibles)
 
-    hilo_carrera = threading.Thread(target=bucle_carrera_anonima, args=(chat_id, thread_id))
+    for idx, u in enumerate(carrera_juego["participantes"]):
+        carrera_juego["emojis_asignados"][u] = emojis_disponibles[idx]
+        carrera_juego["posiciones"][u] = 0
+
+    texto_carrera = renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"])
+    msg = bot.send_message(chat_id, texto_carrera, message_thread_id=thread_id)
+    carrera_juego["msg_carrera_id"] = msg.message_id
+
+    hilo_carrera = threading.Thread(target=simular_carrera, args=(chat_id, thread_id))
     hilo_carrera.daemon = True
     hilo_carrera.start()
 
-def bucle_carrera_anonima(chat_id, thread_id):
+def simular_carrera(chat_id, thread_id):
     meta = 23
-    msg = bot.send_message(chat_id, renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta), message_thread_id=thread_id)
-    carrera_juego["msg_carrera_id"] = msg.message_id
+    ganador = None
 
-    ganadores = []
-    
     while carrera_juego["fase"] == "jugando":
         time.sleep(3)
-        if carrera_juego["fase"] != "jugando":
-            break
-
-        # Avanza posiciones aleatoriamente entre 1 y 3 pasos
         for u in carrera_juego["participantes"]:
-            pasos = random.randint(1, 3)
-            carrera_juego["posiciones"][u] += pasos
+            avance = random.randint(1, 3)
+            carrera_juego["posiciones"][u] += avance
             if carrera_juego["posiciones"][u] >= meta:
-                ganadores.append(u)
+                ganador = u
+                break
 
-        if ganadores:
-            carrera_juego["fase"] = "inactivo"
-            try:
-                bot.edit_message_text(renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta, finalizado=True), chat_id, carrera_juego["msg_carrera_id"])
-            except Exception:
-                pass
-            
-            ganador = ganadores[0]
-            registrar_victoria(ganador)
-            emoji_ganador = carrera_juego["emojis_asignados"][ganador]
-            
-            revelacion = "\n".join([f"        ⊹    @{u}  :  {carrera_juego['emojis_asignados'][u]}" for u in carrera_juego["participantes"]])
-            
-            texto_fin = (
-                f"   ⎯        ¡la carrera ha terminado!  ♡\n\n"
-                f"   (๑´`๑)     ganador : @{ganador} ({emoji_ganador})\n"
-                f"premio obtenido : {carrera_juego['premio']}\n\n"
-                "  ⎯        revelación de emojis :\n"
-                f"{revelacion}"
-            )
-            bot.send_message(chat_id, texto_fin, message_thread_id=thread_id)
+        if ganador:
             break
-        else:
-            try:
-                bot.edit_message_text(renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], meta), chat_id, carrera_juego["msg_carrera_id"])
-            except Exception:
-                pass
 
-# --- INICIALIZACIÓN DEL BOT ---
-if __name__ == "__main__":
-    print("CherrieBot está corriendo correctamente...")
-    bot.infinity_polling(skip_pending=True)
+        nuevo_texto = renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"])
+        try:
+            bot.edit_message_text(nuevo_texto, chat_id, carrera_juego["msg_carrera_id"])
+        except Exception:
+            pass
+
+    if ganador and carrera_juego["fase"] == "jugando":
+        carrera_juego["fase"] = "inactivo"
+        registrar_victoria(ganador)
+        texto_final = renderizar_carrera(carrera_juego["posiciones"], carrera_juego["emojis_asignados"], finalizado=True)
+        try:
+            bot.edit_message_text(texto_final, chat_id, carrera_juego["msg_carrera_id"])
+        except Exception:
+            pass
+        
+        emoji_ganador = carrera_juego["emojis_asignados"][ganador]
+        bot.send_message(
+            chat_id, 
+            f" ⸜(ˊᗜˋ*)⸝  ¡@{ganador} ha ganado la carrera con {emoji_ganador}! reclamas tu premio de {carrera_juego['premio']} ♡", 
+            message_thread_id=thread_id
+        )
+
+bot.infinity_polling()
