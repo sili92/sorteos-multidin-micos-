@@ -123,6 +123,7 @@ carrera_juego = {
     "participantes": [],
     "emojis_asignados": {},
     "posiciones": {},
+    "pistas": [],
     "msg_carrera_id": None,
     "msg_lobby_id": None
 }
@@ -738,7 +739,7 @@ BANCO_PREGUNTAS = [
     {"p": "¿qué canción de psy se convirtió en un fenómeno viral en 2012?", "o": ["Gangnam Style", "Gentleman", "Dynamite", "Butter"], "c": 0},
     {"p": "¿qué artista pop es conocida por álbumes como 1989 y folklore?", "o": ["Ariana Grande", "Taylor Swift", "Katy Perry", "Billie Eilish"], "c": 1},
     {"p": "¿cuál es el nombre del hermano de mario en nintendo?", "o": ["Wario", "Yoshi", "Luigi", "Toad"], "c": 2},
-    {"p": "¿en qué juego construyes estructuras con bloques?", "o": ["Roblox", "Minecraft", "Terraria", "Fortnite"], "c": 1},
+    {"p": "¿en qué juego construyes estructuras with bloques?", "o": ["Roblox", "Minecraft", "Terraria", "Fortnite"], "c": 1},
     {"p": "¿quién dirigió la película jurassic park (1993)?", "o": ["James Cameron", "Steven Spielberg", "Christopher Nolan", "George Lucas"], "c": 1},
     {"p": "¿qué película sobre un naufragio ganó el óscar en 1998?", "o": ["Titanic", "Avatar", "Gladiador", "Inception"], "c": 0},
     {"p": "¿cuál es el nombre del villano principal en la trilogía original de star wars?", "o": ["Voldemort", "Darth Vader", "Sauron", "Thanos"], "c": 1}
@@ -1909,58 +1910,33 @@ def resolver_redpink(message):
         bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    # Sorteo automático para participantes que no hayan apostado
     for p in redpink_juego["participantes"]:
         if p not in redpink_juego["elecciones"]:
             redpink_juego["elecciones"][p] = random.choice(['red', 'pink'])
 
-    redpink_juego["fase"] = "revelando"
-    color_ganador = random.choice(['red', 'pink'])
+    ganador_color = random.choice(['red', 'pink'])
+    sticker_ganador = STICKER_RED if ganador_color == 'red' else STICKER_PINK
 
-    bot.send_message(chat_id, "✦   ¡Apuestas cerradas! La moneda está girando en el aire... 🪙✨", message_thread_id=thread_id)
+    ganadores = [p for p, eleccion in redpink_juego["elecciones"].items() if eleccion == ganador_color]
+
     time.sleep(3)
-
-    sticker_enviar = STICKER_RED if color_ganador == 'red' else STICKER_PINK
     try:
-        bot.send_sticker(chat_id, sticker_enviar, message_thread_id=thread_id)
+        bot.send_sticker(chat_id, sticker_ganador, message_thread_id=thread_id)
     except Exception:
         pass
 
     time.sleep(3)
-    ganadores = [p for p, elec in redpink_juego["elecciones"].items() if elec == color_ganador]
-
-    if not ganadores:
-        texto_res = f" (╥﹏╥)  ¡Salió **{color_ganador.upper()}**! Pero nadie apostó por este color. ¡No hay ganadores!"
-    else:
+    if ganadores:
         ganador_final = random.choice(ganadores)
         registrar_victoria(ganador_final)
-        str_ganadores = ", ".join([f"@{g}" for g in ganadores])
-        texto_res = (
-            f"  ♡  ¡Salió **{color_ganador.upper()}**!\n\n"
-            f"𓂃   Acertaron  :  {str_ganadores}\n\n"
-            f"⸜(*ˊᗜˋ*)⸝ ¡Felicidades @{ganador_final}! La suerte estuvo de tu lado y ganaste {redpink_juego['premio']} ♡."
-        )
+        texto_final = f" (๑>ᴗ<๑)  ¡el color ganador fue {ganador_color.upper()}! felicidades @{ganador_final}, te llevas {redpink_juego['premio']} ♡."
+    else:
+        texto_final = f" (╥﹏╥)  el color ganador fue {ganador_color.upper()}, pero nadie apostó por él. no hay ganador."
 
-    bot.send_message(chat_id, texto_res, parse_mode="Markdown", message_thread_id=thread_id)
+    bot.send_message(chat_id, texto_final, message_thread_id=thread_id)
     redpink_juego["fase"] = "inactivo"
 
 # --- JUEGO DE CARRERA ANÓNIMA ---
-def generar_texto_carrera(meta=20):
-    lineas = []
-    for idx, p in enumerate(carrera_juego["participantes"]):
-        emoji = carrera_juego["emojis_asignados"][p]
-        pos = carrera_juego["posiciones"][p]
-        puntos_atras = pos
-        puntos_adelante = max(0, meta - pos)
-        pistas = " ·" * puntos_atras + f" {emoji}" + " ·" * puntos_adelante + " 🏁"
-        lineas.append(pistas)
-
-    return (
-        "ㅤㅤㅤㅤ ㅤ¡  𝗰︩︪orran  !\n" +
-        "\n".join(lineas) +
-        "\n\n · · · · · · · · · · · · · · · · · · · · · "
-    )
-
 @bot.message_handler(commands=['carrera'])
 def crear_carrera(message):
     chat_id, user_id = message.chat.id, message.from_user.id
@@ -1971,7 +1947,7 @@ def crear_carrera(message):
         return
 
     if carrera_juego["fase"] != "inactivo":
-        bot.send_message(chat_id, " (╥﹏╥)  ya hay una carrera en curso o un lobby abierto.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay una carrera en curso.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     premio = message.text[8:].strip()
@@ -1987,17 +1963,16 @@ def crear_carrera(message):
     carrera_juego["participantes"].clear()
     carrera_juego["emojis_asignados"].clear()
     carrera_juego["posiciones"].clear()
+    carrera_juego["pistas"].clear()
 
     texto_lobby = (
-        "ㅤ🏎️    ㅤ  carrera anónima iniciada.  \n\n"
-        "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
-        "        ⊹    (esperando...)\n\n"
-        "₍˄..˄₎꠹     presiona el botón para unirte a la carrera...\n"
-        "admin, puedes colocar /carrerastart para dar inicio a la partida."
+        "ㅤㅤ୭ৎ ࣪ ׅ ㅤㅤ 𝗰︩︪arrera anónima iniciada!\n\n"
+        "(⌯ˇ- ˇ⌯)◜ nadie sabe quién es quién hasta que la partida finalice.\n"
+        "ㅤ¡presiona el botón para unirte! admin, inicia la carrera con /carrerastart."
     )
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("   ⊹  JOIN!    ", callback_data="unirse_carrera_lobby"))
+    markup.add(types.InlineKeyboardButton("JOIN!", callback_data="unirse_carrera_lobby"))
 
     time.sleep(3)
     msg = bot.send_message(chat_id, texto_lobby, reply_markup=markup, message_thread_id=thread_id)
@@ -2011,29 +1986,18 @@ def unirse_carrera_callback(call):
 
     username = call.from_user.username if call.from_user.username else call.from_user.first_name
     usuarios_ids[username] = call.from_user.id
+    chat_id = carrera_juego["chat_id"]
+    thread_id = carrera_juego["thread_id"]
 
     if username in carrera_juego["participantes"]:
-        bot.answer_callback_query(call.id, "Ya estás en el lobby.", show_alert=True)
+        bot.answer_callback_query(call.id, "Ya estás en la carrera.", show_alert=True)
         return
 
     carrera_juego["participantes"].append(username)
     bot.answer_callback_query(call.id, "¡Te has unido a la carrera!")
 
-    list_p = "\n".join([f"        ⊹    @{p}" for p in carrera_juego["participantes"]])
-    nuevo_texto = (
-        "ㅤ🏎️    ㅤ  carrera anónima iniciada.  \n\n"
-        "  ⠀⎯ ⠀  𝗽︩︩︪articipantes     :\n"
-        f"{list_p}\n\n"
-        "₍˄..˄₎꠹     presiona el botón para unirte a la carrera...\n"
-        "admin, puedes colocar /carrerastart para dar inicio a la partida."
-    )
-
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("   ⊹  JOIN!    ", callback_data="unirse_carrera_lobby"))
-    try:
-        bot.edit_message_text(nuevo_texto, carrera_juego["chat_id"], carrera_juego["msg_lobby_id"], reply_markup=markup)
-    except Exception:
-        pass
+    texto_join = f"︵‌  @{username} se ha unido... ¿será el afortunado?   ₍˶ᵔ ˕ ᵔ˶₎"
+    bot.send_message(chat_id, texto_join, message_thread_id=thread_id)
 
 @bot.message_handler(commands=['carrerastart'])
 def iniciar_carrera(message):
@@ -2061,68 +2025,119 @@ def iniciar_carrera(message):
     except Exception:
         pass
 
-    # Asignar emojis aleatorios sin repetir
-    emojis_disponibles = random.sample(EMOJIS_CARRERA, len(carrera_juego["participantes"]))
-    for idx, p in enumerate(carrera_juego["participantes"]):
-        carrera_juego["emojis_asignados"][p] = emojis_disponibles[idx]
-        carrera_juego["posiciones"][p] = 0
+    carrera_juego["fase"] = "jugando"
 
-        # Enviar emoji al privado
-        uid = usuarios_ids.get(p)
-        if uid:
+    # Asignación anónima y desordenada de emojis
+    emojis_disponibles = random.sample(EMOJIS_CARRERA, len(carrera_juego["participantes"]))
+    participantes_shuffled = list(carrera_juego["participantes"])
+    random.shuffle(participantes_shuffled)
+
+    for p, emoji in zip(participantes_shuffled, emojis_disponibles):
+        carrera_juego["emojis_asignados"][p] = emoji
+
+    # Orden desordenado de la pista (NO en el orden en que se unieron)
+    carrera_juego["pistas"] = list(emojis_disponibles)
+    random.shuffle(carrera_juego["pistas"])
+
+    for emoji in carrera_juego["pistas"]:
+        carrera_juego["posiciones"][emoji] = 0
+
+    texto_inicio = (
+        "ㅤ ⪩⪨     ㅤ  ㅤ¡ Ɩa carrera ha iniciado !\n"
+        "ㅤㅤ¿quién ganará? ¿quién soy? ¿quién es?\n"
+        "ㅤㅤㅤㅤㅤ¡ es un misterio !    (⌯ˇ- ˇ⌯)"
+    )
+
+    time.sleep(3)
+    bot.send_message(chat_id, texto_inicio, message_thread_id=thread_id)
+
+    time.sleep(3)
+    pista_rend = renderizar_pista_carrera()
+    msg_c = bot.send_message(chat_id, f"ㅤㅤㅤㅤ ㅤ¡  𝗰︩︪ׄorran  !\n{pista_rend}", message_thread_id=thread_id)
+    carrera_juego["msg_carrera_id"] = msg_c.message_id
+
+    hilo_c = threading.Thread(target=ejecutar_bucle_carrera)
+    hilo_c.daemon = True
+    hilo_c.start()
+
+def renderizar_pista_carrera():
+    TOTAL_PASOS = 22
+    lineas = []
+    for emoji in carrera_juego["pistas"]:
+        pos = carrera_juego["posiciones"][emoji]
+        linea = f"{' · ' * pos}{emoji}{' · ' * (TOTAL_PASOS - pos)}🏁"
+        lineas.append(linea)
+    return "\n".join(lineas)
+
+def ejecutar_bucle_carrera():
+    chat_id = carrera_juego["chat_id"]
+    msg_id = carrera_juego["msg_carrera_id"]
+    TOTAL_PASOS = 22
+    emoji_ganador = None
+
+    while True:
+        time.sleep(3)
+        if carrera_juego["fase"] != "jugando":
+            break
+
+        # Movimiento síncrono por ronda
+        for emoji in carrera_juego["pistas"]:
+            avance = random.choice([0, 1, 2])
+            carrera_juego["posiciones"][emoji] = min(TOTAL_PASOS, carrera_juego["posiciones"][emoji] + avance)
+
+        pista_rend = renderizar_pista_carrera()
+
+        # Comprobar si alguien llegó a la meta
+        ganadores_ronda = [e for e in carrera_juego["pistas"] if carrera_juego["posiciones"][e] >= TOTAL_PASOS]
+
+        if ganadores_ronda:
+            emoji_ganador = ganadores_ronda[0]
+            texto_pantalla = f"ㅤㅤㅤㅤ ㅤ¡  𝗰︩︪ׄorran  !\n{pista_rend}\nㅤ¡¡ㅤ(ˊᗜˋ*)ㅤㅤ¡tenemos a un ganador!"
             try:
-                bot.send_message(uid, f"ㅤ(๑>ᴗ<๑)ㅤholi, @{p}! en la carrera anónima tu fruta asignada es: {emojis_disponibles[idx]}")
+                bot.edit_message_text(texto_pantalla, chat_id, msg_id)
+            except Exception:
+                pass
+            break
+        else:
+            texto_pantalla = f"ㅤㅤㅤㅤ ㅤ¡  𝗰︩︪ׄorran  !\n{pista_rend}"
+            try:
+                bot.edit_message_text(texto_pantalla, chat_id, msg_id)
             except Exception:
                 pass
 
-    carrera_juego["fase"] = "corriendo"
-    bot.send_message(chat_id, "🏎️💨 ¡La carrera ha comenzado! Revisa tu privado para conocer tu fruta asignada.", message_thread_id=thread_id)
-    time.sleep(3)
-
-    msg_pista = bot.send_message(chat_id, generar_texto_carrera(), message_thread_id=thread_id)
-    carrera_juego["msg_carrera_id"] = msg_pista.message_id
-
-    hilo_carrera = threading.Thread(target=bucle_carrera, args=(chat_id, thread_id))
-    hilo_carrera.daemon = True
-    hilo_carrera.start()
-
-def bucle_carrera(chat_id, thread_id):
-    meta = 20
-    ganador = None
-
-    while carrera_juego["fase"] == "corriendo":
+    if emoji_ganador:
         time.sleep(3)
-        if carrera_juego["fase"] != "corriendo":
-            break
-
-        # Avanzar aleatoriamente
-        for p in carrera_juego["participantes"]:
-            avance = random.randint(1, 3)
-            carrera_juego["posiciones"][p] += avance
-            if carrera_juego["posiciones"][p] >= meta:
-                carrera_juego["posiciones"][p] = meta
-                if not ganador:
-                    ganador = p
-
-        try:
-            bot.edit_message_text(generar_texto_carrera(meta), chat_id, carrera_juego["msg_carrera_id"])
-        except Exception:
-            pass
-
-        if ganador:
-            break
-
-    if ganador and carrera_juego["fase"] == "corriendo":
-        registrar_victoria(ganador)
-        emoji_ganador = carrera_juego["emojis_asignados"][ganador]
-        texto_final = (
-            f"⸜(*ˊᗜˋ*)⸝ ¡tenemos un ganador! {emoji_ganador} (@{ganador}) ha cruzado la meta en primer lugar!\n\n"
-            f"¡muchísimas felicidades! te llevas {carrera_juego['premio']} ♡."
+        msg_cruzado = (
+            "ㅤㅤ  ¡un anónimo ha cruzado la meta!\n"
+            f"ㅤㅤ   ㅤ¿quién eres, {emoji_ganador}?"
         )
-        time.sleep(3)
-        bot.send_message(chat_id, texto_final, message_thread_id=thread_id)
-        carrera_juego["fase"] = "inactivo"
+        bot.send_message(chat_id, msg_cruzado, message_thread_id=carrera_juego["thread_id"])
 
-# --- INICIALIZACIÓN Y POLLING ---
-print("Bot Cherrie iniciado correctamente...")
-bot.infinity_polling(skip_pending=True)
+        time.sleep(3)
+
+        # Buscar usuario correspondiente al emoji ganador
+        usuario_ganador = None
+        for p, emoji in carrera_juego["emojis_asignados"].items():
+            if emoji == emoji_ganador:
+                usuario_ganador = p
+                break
+
+        if usuario_ganador:
+            registrar_victoria(usuario_ganador)
+
+        lineas_revelacion = ["ㅤㅤꔫ      ℛevelando identidades...\n"]
+        for p, emoji in carrera_juego["emojis_asignados"].items():
+            if p == usuario_ganador:
+                lineas_revelacion.append(f" ᜊ   ¡𝐆‌anador! {emoji} — @{p}")
+            else:
+                lineas_revelacion.append(f" ᜊ   {emoji} — @{p}")
+
+        texto_revelacion = "\n".join(lineas_revelacion)
+        bot.send_message(chat_id, texto_revelacion, message_thread_id=carrera_juego["thread_id"])
+
+    carrera_juego["fase"] = "inactivo"
+
+# --- EJECUCIÓN DEL BOT ---
+if __name__ == "__main__":
+    print("CherrieBot corriendo correctamente...")
+    bot.infinity_polling(skip_pending=True)
