@@ -745,16 +745,35 @@ BANCO_PREGUNTAS = [
     {"p": "¿cuál es el nombre del villano principal en la trilogía original de star wars?", "o": ["Voldemort", "Darth Vader", "Sauron", "Thanos"], "c": 1}
 ]
 
-# --- SISTEMA DE QUIZ ---
+# --- SISTEMA DE QUIZ DESDE CERO ---
+
+def mencionar_usuario(username):
+    """Devuelve una mención clickable conservando el @ cuando existe username."""
+    uid = usuarios_ids.get(username)
+    if uid:
+        return f"[{('@' + username) if username else username}](tg://user?id={uid})"
+    return f"@{username}"
+
+
 def generar_texto_lobby_quiz():
-    participantes_str = "\n".join([f"✦    @{p}" for p in quiz_juego["participantes"]]) if quiz_juego["participantes"] else "✦    (esperando participantes...)"
+    participantes = list(quiz_juego["participantes"])
+
+    if participantes:
+        participantes_str = "\n".join(
+            f"         ⊹    {mencionar_usuario(p)}" for p in participantes
+        )
+    else:
+        participantes_str = "         ⊹    (esperando participantes...)"
+
     return (
-        "ㅤ ꯳⃘꤫ ㅤㅤ¡hora del Quiz de Batalla!\n"
-        f"—  únete a la batalla para demostrar tus conocimientos y llevarte {quiz_juego['premio']}.\n\n"
-        "participantes:\n"
-        f"{participantes_str}\n\n"
-        "— para iniciar ; /quizstart."
+        "ㅤㅤ ✿ㅤㅤ¡𝓝ueva partida de quiz!ㅤㅤㅤㅤㅤㅤㅤㅤ\n"
+        f"⠀ ᨭ⠀   prueba tus conocimientos jugando, si eres el más listo, ¡puedes llevarte {quiz_juego['premio']}!    ⠀⎯ ⠀\n"
+        " 𝗽︩︩︪articipantes     :\n"
+        f"{participantes_str}\n"
+        "₍˄..˄₎꠹     presiona el botón para poder participar...\n"
+        "admin, puedes colocar /quizstart para dar inicio a la partida."
     )
+
 
 @bot.message_handler(commands=['quiz'])
 def crear_lobby_quiz(message):
@@ -762,16 +781,32 @@ def crear_lobby_quiz(message):
     thread_id = get_thread_id(message)
 
     if not es_admin(chat_id, user_id):
-        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar un quiz.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            chat_id,
+            " (╥﹏╥)  no eres admin, no puedes iniciar un quiz.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
     if quiz_juego["fase"] != "inactivo":
-        bot.send_message(chat_id, " (╥﹏╥)  ya hay un quiz en proceso o un lobby abierto.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            chat_id,
+            " (╥﹏╥)  ya hay un quiz en proceso o un lobby abierto.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
     premio = message.text[5:].strip()
+
     if not premio:
-        bot.send_message(chat_id, "✦ Estructura incorrecta. Ejemplo: /quiz VIP Mensual", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            chat_id,
+            "✦ Estructura incorrecta. Ejemplo: /quiz VIP Mensual",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
     quiz_juego["fase"] = "lobby"
@@ -781,38 +816,77 @@ def crear_lobby_quiz(message):
     quiz_juego["premio"] = premio
     quiz_juego["participantes"].clear()
     quiz_juego["participantes_activos"].clear()
+    quiz_juego["respuestas"].clear()
     quiz_juego["dificultad"] = 1
     quiz_juego["preguntas_usadas"].clear()
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_quiz_lobby"))
+    markup.add(
+        types.InlineKeyboardButton(
+            "୭ৎㅤ𝗝𝗢𝗜𝗡!",
+            callback_data="unirse_quiz_lobby"
+        )
+    )
 
-    time.sleep(3)
-    msg = bot.send_message(chat_id, generar_texto_lobby_quiz(), reply_markup=markup, message_thread_id=thread_id)
+    msg = bot.send_message(
+        chat_id,
+        generar_texto_lobby_quiz(),
+        reply_markup=markup,
+        parse_mode="Markdown",
+        message_thread_id=thread_id
+    )
     quiz_juego["msg_lobby_id"] = msg.message_id
+
 
 @bot.callback_query_handler(func=lambda call: call.data == "unirse_quiz_lobby")
 def unirse_quiz_callback(call):
     if quiz_juego["fase"] != "lobby":
-        bot.answer_callback_query(call.id, "El lobby ya no está disponible.", show_alert=True)
+        bot.answer_callback_query(
+            call.id,
+            "El lobby ya no está disponible.",
+            show_alert=True
+        )
         return
 
-    username = call.from_user.username if call.from_user.username else call.from_user.first_name
+    username = (
+        call.from_user.username
+        if call.from_user.username
+        else call.from_user.first_name
+    )
+
     usuarios_ids[username] = call.from_user.id
 
     if username in quiz_juego["participantes"]:
-        bot.answer_callback_query(call.id, "Ya estás en el lobby.", show_alert=True)
+        bot.answer_callback_query(
+            call.id,
+            "Ya estás participando en este quiz.",
+            show_alert=True
+        )
         return
 
     quiz_juego["participantes"].add(username)
+
     bot.answer_callback_query(call.id, "¡Te has unido al Quiz!")
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_quiz_lobby"))
+    markup.add(
+        types.InlineKeyboardButton(
+            "୭ৎㅤ𝗝𝗢𝗜𝗡!",
+            callback_data="unirse_quiz_lobby"
+        )
+    )
+
     try:
-        bot.edit_message_text(generar_texto_lobby_quiz(), quiz_juego["chat_id"], quiz_juego["msg_lobby_id"], reply_markup=markup)
+        bot.edit_message_text(
+            generar_texto_lobby_quiz(),
+            quiz_juego["chat_id"],
+            quiz_juego["msg_lobby_id"],
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
     except Exception:
         pass
+
 
 @bot.message_handler(commands=['quizstart'])
 def iniciar_partida_quiz(message):
@@ -820,202 +894,389 @@ def iniciar_partida_quiz(message):
     thread_id = get_thread_id(message)
 
     if not es_admin(chat_id, user_id):
-        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar el quiz.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            chat_id,
+            " (╥﹏╥)  no eres admin, no puedes iniciar el quiz.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
     if quiz_juego["fase"] != "lobby":
-        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby esperando para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            chat_id,
+            " (╥﹏╥)  no hay ningún lobby esperando para iniciar.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
     if quiz_juego["admin_id"] != user_id:
-        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            chat_id,
+            " (╥﹏╥)  solo el admin que inició la partida puede administrarla.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
     if len(quiz_juego["participantes"]) < 2:
-        bot.send_message(chat_id, " (╥﹏╥)  se necesitan al menos 2 participantes para comenzar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            chat_id,
+            " (╥﹏╥)  se necesitan al menos 2 participantes para comenzar.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
     try:
-        bot.edit_message_reply_markup(chat_id, quiz_juego["msg_lobby_id"], reply_markup=None)
+        bot.edit_message_reply_markup(
+            chat_id,
+            quiz_juego["msg_lobby_id"],
+            reply_markup=None
+        )
     except Exception:
         pass
 
     quiz_juego["fase"] = "jugando"
     quiz_juego["participantes_activos"] = set(quiz_juego["participantes"])
+    quiz_juego["dificultad"] = 1
+    quiz_juego["respuestas"].clear()
 
-    bot.send_message(chat_id, "ㅤ ꯳⃘꤫ ㅤ ¡Lobby cerrado! La batalla del Quiz comienza ahora...", message_thread_id=thread_id)
+    bot.send_message(
+        chat_id,
+        "ㅤꕮ⠀ㅤ¡𝑳obby cerrado!ㅤㅤㅤㅤㅤ     ⊹       iniciando la partida...",
+        message_thread_id=thread_id
+    )
+
     time.sleep(3)
     lanzar_siguiente_pregunta(chat_id)
 
+
 def lanzar_siguiente_pregunta(chat_id):
+    if quiz_juego["fase"] != "jugando":
+        return
+
     thread_id = quiz_juego["thread_id"]
+
     if len(quiz_juego["participantes_activos"]) <= 1:
         finalizar_juego_quiz(chat_id)
         return
 
-    disponibles = [q for q in BANCO_PREGUNTAS if q["p"] not in quiz_juego["preguntas_usadas"]]
+    disponibles = [
+        q for q in BANCO_PREGUNTAS
+        if q["p"] not in quiz_juego["preguntas_usadas"]
+    ]
+
     if not disponibles:
         quiz_juego["preguntas_usadas"].clear()
         disponibles = BANCO_PREGUNTAS
 
     pregunta_obj = random.choice(disponibles)
+
     quiz_juego["preguntas_usadas"].append(pregunta_obj["p"])
     quiz_juego["pregunta_actual"] = pregunta_obj
     quiz_juego["opcion_correcta"] = pregunta_obj["c"]
     quiz_juego["respuestas"].clear()
 
-    tiempo_limite = max(5, 20 - (quiz_juego["dificultad"] - 1) * 2)
+    # 15 segundos en la primera ronda y uno menos por cada ronda.
+    tiempo_limite = max(1, 16 - quiz_juego["dificultad"])
 
     texto_pregunta = (
-        f"ㅤㅤㅤㅤㅤ୭ৎ ࣪ ׅ ㅤRonda {quiz_juego['dificultad']}ㅤ (Sobrevivientes: {len(quiz_juego['participantes_activos'])})\n\n"
-        f"𓂃   **Pregunta:** {pregunta_obj['p']}\n\n"
-        f"⏱️ ¡Tienen **{tiempo_limite} segundos** para responder!"
+        f"ㅤㅤㅤ୭ৎ ࣪ ׅ ㅤℛonda {quiz_juego['dificultad']}ㅤ ! ㅤ𖥻ㅤ"
+        f"{pregunta_obj['p']}\n\n"
+        f"ㅤ₍⑅ᐢ..ᐢ₎ㅤtienen {tiempo_limite} segundos para responder..."
     )
 
     markup = types.InlineKeyboardMarkup()
-    for idx, opcion in enumerate(pregunta_obj["o"]):
-        markup.add(types.InlineKeyboardButton(f"᭍᭭ {opcion}", callback_data=f"quiz_ans_{idx}"))
 
-    msg = bot.send_message(chat_id, texto_pregunta, reply_markup=markup, parse_mode="Markdown", message_thread_id=thread_id)
+    for idx, opcion in enumerate(pregunta_obj["o"]):
+        markup.add(
+            types.InlineKeyboardButton(
+                opcion,
+                callback_data=f"quiz_ans_{idx}"
+            )
+        )
+
+    msg = bot.send_message(
+        chat_id,
+        texto_pregunta,
+        reply_markup=markup,
+        message_thread_id=thread_id
+    )
+
     quiz_juego["msg_pregunta_id"] = msg.message_id
 
-    hilo_timer = threading.Thread(target=temporizador_pregunta, args=(chat_id, quiz_juego["dificultad"], tiempo_limite))
+    hilo_timer = threading.Thread(
+        target=temporizador_pregunta,
+        args=(chat_id, quiz_juego["dificultad"], tiempo_limite)
+    )
     hilo_timer.daemon = True
     hilo_timer.start()
+
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("quiz_ans_"))
 def procesar_respuesta_quiz(call):
     if quiz_juego["fase"] != "jugando":
-        bot.answer_callback_query(call.id, "No hay ningún quiz activo.", show_alert=True)
+        bot.answer_callback_query(
+            call.id,
+            "No hay ningún quiz activo.",
+            show_alert=True
+        )
         return
 
-    username = call.from_user.username if call.from_user.username else call.from_user.first_name
+    username = (
+        call.from_user.username
+        if call.from_user.username
+        else call.from_user.first_name
+    )
+
     usuarios_ids[username] = call.from_user.id
 
     if username not in quiz_juego["participantes_activos"]:
-        bot.answer_callback_query(call.id, "Ya fuiste eliminado o no estabas en esta partida.", show_alert=True)
+        bot.answer_callback_query(
+            call.id,
+            "Ya fuiste eliminado o no estabas en esta partida.",
+            show_alert=True
+        )
         return
 
     if username in quiz_juego["respuestas"]:
-        bot.answer_callback_query(call.id, "Ya enviaste tu respuesta para esta pregunta.", show_alert=True)
+        bot.answer_callback_query(
+            call.id,
+            "Ya enviaste tu respuesta para esta pregunta.",
+            show_alert=True
+        )
         return
 
-    opcion_elegida = int(call.data.split("_")[2])
+    try:
+        opcion_elegida = int(call.data.split("_")[2])
+    except (ValueError, IndexError):
+        bot.answer_callback_query(call.id, "Respuesta inválida.", show_alert=True)
+        return
+
     quiz_juego["respuestas"][username] = {
         "opcion": opcion_elegida,
         "tiempo": time.time()
     }
+
     bot.answer_callback_query(call.id, "¡Respuesta registrada!")
+
 
 def temporizador_pregunta(chat_id, dificultad_objetivo, segundos):
     time.sleep(segundos)
-    if quiz_juego["fase"] == "jugando" and quiz_juego["dificultad"] == dificultad_objetivo:
+
+    if (
+        quiz_juego["fase"] == "jugando"
+        and quiz_juego["dificultad"] == dificultad_objetivo
+    ):
         evaluar_resultados_ronda(chat_id)
 
+
 def evaluar_resultados_ronda(chat_id):
+    if quiz_juego["fase"] != "jugando":
+        return
+
     thread_id = quiz_juego["thread_id"]
+
     try:
-        bot.edit_message_reply_markup(chat_id, quiz_juego["msg_pregunta_id"], reply_markup=None)
+        bot.edit_message_reply_markup(
+            chat_id,
+            quiz_juego["msg_pregunta_id"],
+            reply_markup=None
+        )
     except Exception:
         pass
 
     correcta_idx = quiz_juego["opcion_correcta"]
     texto_correcta = quiz_juego["pregunta_actual"]["o"][correcta_idx]
-    
+
+    participantes_ronda = list(quiz_juego["participantes_activos"])
+
     acertaron = []
-    eliminados_incorrecta = set()
-    eliminados_afk = set()
+    eliminados_incorrecta = []
+    eliminados_afk = []
 
-    for p in list(quiz_juego["participantes_activos"]):
-        if p in quiz_juego["respuestas"]:
-            resp = quiz_juego["respuestas"][p]
-            if resp["opcion"] == correcta_idx:
-                acertaron.append((p, resp["tiempo"]))
-                quiz_aciertos[p] = quiz_aciertos.get(p, 0) + 1
-            else:
-                eliminados_incorrecta.add(p)
+    for jugador in participantes_ronda:
+        respuesta = quiz_juego["respuestas"].get(jugador)
+
+        if respuesta is None:
+            eliminados_afk.append(jugador)
+        elif respuesta["opcion"] == correcta_idx:
+            acertaron.append((jugador, respuesta["tiempo"]))
+            quiz_aciertos[jugador] = quiz_aciertos.get(jugador, 0) + 1
         else:
-            eliminados_afk.add(p)
+            eliminados_incorrecta.append(jugador)
 
-    es_ultima_ronda_2p = (len(quiz_juego["participantes_activos"]) == 2)
-    mensaje_eliminacion_especial = ""
+    # Caso especial: la partida comenzó con más de 2 jugadores,
+    # pero ahora quedan exactamente 2.
+    # Si ambos aciertan, gana el que respondió primero.
+    partida_comenzo_con_mas_de_dos = len(quiz_juego["participantes"]) > 2
+    quedan_dos = len(participantes_ronda) == 2
 
-    if es_ultima_ronda_2p and len(acertaron) == 2:
+    if (
+        partida_comenzo_con_mas_de_dos
+        and quedan_dos
+        and len(acertaron) == 2
+    ):
         acertaron.sort(key=lambda x: x[1])
-        mas_lento = acertaron[1][0]
-        eliminados_incorrecta.add(mas_lento)
-        sobrevivientes_ronda = {acertaron[0][0]}
-        mensaje_eliminacion_especial = f"¡todos acertaron! pero @{mas_lento}, al ser el último en responder, quedó descalificado."
-    else:
-        sobrevivientes_ronda = {p for p, t in acertaron}
 
-    if len(sobrevivientes_ronda) == 0:
+        ganador_ronda = acertaron[0][0]
+        eliminado_por_velocidad = acertaron[1][0]
+
+        quiz_juego["participantes_activos"] = {ganador_ronda}
+
         texto_resumen = (
-            " (๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
-            f"𓂃   La respuesta correcta era  :  **{texto_correcta}**\n\n"
-            "✦   ¡Nadie acertó en esta ronda! Todos se salvan por piedad y continúan... ٩(ˊᗜˋ*)o"
+            "ㅤㅤㅤㅤ(๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
+            f"๑  la respuesta correcta era  :  {texto_correcta}\n\n"
+            f"๑  ¡todos acertaron! pero {mencionar_usuario(eliminado_por_velocidad)}, "
+            "al ser el último en responder, quedó descalificado."
         )
-    else:
-        quiz_juego["participantes_activos"] = sobrevivientes_ronda
-        
-        str_eliminados = " ".join([f"@{e}" for e in eliminados_incorrecta]) if eliminados_incorrecta else "@"
-        str_afk = " ".join([f"@{e}" for e in eliminados_afk]) if eliminados_afk else "@"
 
-        if mensaje_eliminacion_especial:
+    else:
+        sobrevivientes = {jugador for jugador, _ in acertaron}
+
+        # Si nadie acertó, no hay ganador.
+        if not sobrevivientes:
+            quiz_juego["participantes_activos"].clear()
+
             texto_resumen = (
-                " (๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
-                f"𓂃   La respuesta correcta era  :  **{texto_correcta}**\n\n"
-                f"✦   {mensaje_eliminacion_especial}"
+                "ㅤㅤㅤㅤ(๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
+                f"๑  la respuesta correcta era  :  {texto_correcta}\n"
             )
+
+            if eliminados_incorrecta:
+                for jugador in eliminados_incorrecta:
+                    texto_resumen += (
+                        f"๑  {mencionar_usuario(jugador)} respuesta incorrecta...\n"
+                    )
+
+            if eliminados_afk:
+                for jugador in eliminados_afk:
+                    texto_resumen += (
+                        f"๑  {mencionar_usuario(jugador)} demoró mucho...\n"
+                    )
+
+            texto_resumen += "\n๑  no hay ganador en esta partida."
+
         else:
+            quiz_juego["participantes_activos"] = sobrevivientes
+
             texto_resumen = (
-                " (๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
-                f"𓂃   La respuesta correcta era  :  **{texto_correcta}**\n\n"
-                f"𓂃   Eliminados  :  {str_eliminados}\n"
-                f"𓂃   AFK  :  {str_afk}"
+                "ㅤㅤㅤㅤ(๑>ᴗ<๑)  ¡tiempo agotado!\n\n"
+                f"๑  la respuesta correcta era  :  {texto_correcta}\n"
             )
+
+            for jugador in eliminados_incorrecta:
+                texto_resumen += (
+                    f"๑  {mencionar_usuario(jugador)} respuesta incorrecta...\n"
+                )
+
+            for jugador in eliminados_afk:
+                texto_resumen += (
+                    f"๑  {mencionar_usuario(jugador)} demoró mucho...\n"
+                )
 
     time.sleep(3)
-    bot.send_message(chat_id, texto_resumen, parse_mode="Markdown", message_thread_id=thread_id)
+
+    bot.send_message(
+        chat_id,
+        texto_resumen,
+        parse_mode="Markdown",
+        message_thread_id=thread_id
+    )
 
     if len(quiz_juego["participantes_activos"]) <= 1:
         time.sleep(3)
         finalizar_juego_quiz(chat_id)
-    else:
-        quiz_juego["dificultad"] += 1
-        time.sleep(3)
-        bot.send_message(chat_id, "✦⠀¡Siguiente ronda en unos segundos! Prepárense... ૮ ˶• ˔ •˶ ა", message_thread_id=thread_id)
-        time.sleep(3)
-        lanzar_siguiente_pregunta(chat_id)
+        return
+
+    quiz_juego["dificultad"] += 1
+    time.sleep(3)
+    lanzar_siguiente_pregunta(chat_id)
+
 
 def finalizar_juego_quiz(chat_id):
+    if quiz_juego["fase"] != "jugando":
+        return
+
     thread_id = quiz_juego["thread_id"]
-    if len(quiz_juego["participantes_activos"]) == 1:
-        ganador = list(quiz_juego["participantes_activos"])[0]
+    activos = list(quiz_juego["participantes_activos"])
+
+    if len(activos) == 1:
+        ganador = activos[0]
+
         registrar_victoria(ganador)
+
         texto_final = (
-            "ㅤㅤㅤㅤㅤ୭ৎ ࣪ ׅ ㅤ¡Resultados!ㅤ\n\n"
-            f"𓂃   premio  :  {quiz_juego['premio']}\n"
-            f"𓂃   ganador/es  :  @{ganador}\n\n"
-            f"ㅤㅤㅤᡣ𐭩ㅤ¡felicidades! reclama con @{bot.get_chat(quiz_juego['admin_id']).username or 'admin'}"
+            f"ㅤㅤ⸜(*ˊᗜˋ*)⸝ㅤㅤ¡felicidades {mencionar_usuario(ganador)}!\n\n"
+            f"has ganado la competencia y te llevas el premio: "
+            f"{quiz_juego['premio']} ♡."
         )
     else:
-        texto_final = " (╥﹏╥)  el quiz ha finalizado sin ningún ganador."
+        texto_final = (
+            "ㅤㅤ(╥﹏╥)  el quiz ha finalizado.\n\n"
+            "no hay ganador."
+        )
 
-    bot.send_message(chat_id, texto_final, message_thread_id=thread_id)
+    bot.send_message(
+        chat_id,
+        texto_final,
+        parse_mode="Markdown",
+        message_thread_id=thread_id
+    )
+
     quiz_juego["fase"] = "inactivo"
+    quiz_juego["chat_id"] = None
+    quiz_juego["thread_id"] = None
+    quiz_juego["admin_id"] = None
+    quiz_juego["premio"] = ""
+    quiz_juego["participantes"].clear()
+    quiz_juego["participantes_activos"].clear()
+    quiz_juego["pregunta_actual"] = None
+    quiz_juego["opcion_correcta"] = None
+    quiz_juego["respuestas"].clear()
+    quiz_juego["msg_lobby_id"] = None
+    quiz_juego["msg_pregunta_id"] = None
+    quiz_juego["dificultad"] = 1
+    quiz_juego["preguntas_usadas"].clear()
+
 
 @bot.message_handler(commands=['quizlegends'])
 def mostrar_quiz_legends(message):
     thread_id = get_thread_id(message)
+
     if not quiz_aciertos:
-        bot.send_message(message.chat.id, " (╥﹏╥)  aún no hay estadísticas registradas de quiz.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(
+            message.chat.id,
+            " (╥﹏╥)  aún no hay estadísticas registradas de quiz.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
         return
 
-    ordenados = sorted(quiz_aciertos.items(), key=lambda x: x[1], reverse=True)[:10]
-    lineas = [f"{idx:02d}  ;  @{u} ({pts} respuestas correctas)" for idx, (u, pts) in enumerate(ordenados, start=1)]
-    texto = "      ‿︵       𝘘𝘶𝘪𝘻 𝘓𝘦𝘨𝘦𝘯𝘥𝘴 !\n\n" + "\n".join(lineas)
-    bot.send_message(message.chat.id, texto, message_thread_id=thread_id)
+    ordenados = sorted(
+        quiz_aciertos.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )[:10]
+
+    lineas = [
+        f"{idx:02d}  ;  @{u} ({pts} respuestas correctas)"
+        for idx, (u, pts) in enumerate(ordenados, start=1)
+    ]
+
+    texto = (
+        "      ‿︵       𝘘𝘶𝘪𝘻 𝘓𝘦𝘨𝘦𝘯𝘥𝘴 !\n\n"
+        + "\n".join(lineas)
+    )
+
+    bot.send_message(
+        message.chat.id,
+        texto,
+        message_thread_id=thread_id
+    )
+
 
 # --- CHERRY BOMB ---
 def generar_tablero_grid():
