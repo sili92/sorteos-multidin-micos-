@@ -1,4 +1,4 @@
-
+name=main.sorteo.py
 import telebot
 from telebot import types
 import random
@@ -2105,4 +2105,967 @@ def agregar_admin_por_id(message):
         guardar_admins()
         bot.send_message(message.chat.id, f"ㅤ♡ㅤ¡Usuario(s) {', '.join(agregados)} agregado(s) a la lista de admins autorizados!")
     else:
-        bot.send_message(message
+        bot.send_message(message.chat.id, "✦ No se ingresó ningún ID válido numérico.")
+
+@bot.message_handler(commands=['unadmin'])
+def quitar_admin_por_id(message):
+    username = message.from_user.username
+    if not username or username.lower() != SUPER_ADMIN.lower():
+        return
+
+    args = message.text.split()[1:]
+    if not args:
+        bot.send_message(message.chat.id, "✦ Estructura incorrecta. Uso: /unadmin ID")
+        return
+
+    for arg in args:
+        arg_clean = arg.replace('+', '').strip()
+        if arg_clean.isdigit():
+            user_id_remove = int(arg_clean)
+            if user_id_remove in ADMINS_PERMITIDOS:
+                ADMINS_PERMITIDOS.remove(user_id_remove)
+                guardar_admins()
+                bot.send_message(message.chat.id, f"✦ El usuario {user_id_remove} ha sido removido de la lista de administradores.")
+            else:
+                bot.send_message(message.chat.id, f" (╥﹏╥)  El usuario {user_id_remove} no se encuentra en la lista de admins.")
+
+@bot.message_handler(commands=['admins'])
+def listar_administradores(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin autorizado, no puedes usar este comando.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if not ADMINS_PERMITIDOS:
+        bot.send_message(chat_id, " (╥﹏╥)  no hay administradores registrados actualmente.", message_thread_id=thread_id)
+        return
+
+    lineas = []
+    for uid in list(ADMINS_PERMITIDOS):
+        try:
+            user_chat = bot.get_chat(uid)
+            u_name = f"@{user_chat.username}" if user_chat.username else user_chat.first_name
+        except Exception:
+            u_name = "Desconocido"
+        lineas.append(f"✦ ID: `{uid}` — {u_name}")
+
+    texto = "      ‿︵       𝘈𝘥𝘮𝘪𝘯𝘪𝘴𝘵𝘳𝘢𝘥𝘰𝘳𝘦𝘴 𝘈𝘶𝘵𝘰𝘳𝘪𝘻𝘢𝘥𝘰𝘴 !\n\n" + "\n".join(lineas)
+    bot.send_message(chat_id, texto, parse_mode="Markdown", message_thread_id=thread_id)
+
+# --- COMANDOS BÁSICOS ---
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    username = message.from_user.username if message.from_user.username else message.from_user.first_name
+    usuarios_ids[username] = message.from_user.id
+    if message.chat.type == 'private':
+        nombre_usuario = message.from_user.first_name
+        bot.send_message(
+            message.chat.id,
+            f"૮ ˶• ˔ •˶ ა   ¡holi, {nombre_usuario}! soy cherrie, el bot oficial de cherrys que ayuda en dinámicas para que tú te diviertas y consigas los mejores premios ♡."
+        )
+
+@bot.message_handler(commands=['help'])
+def send_help(message):
+    thread_id = get_thread_id(message)
+    if message.chat.type != 'private':
+        nombre_usuario = message.from_user.first_name
+        bot.send_message(
+            message.chat.id,
+            f"૮ ˶• ˔ •˶ ა   ¡holi, {nombre_usuario}! soy cherrie, el bot oficial de cherrys que ayuda en dinámicas para que tú te diviertas y consigas los mejores premios ♡.",
+            message_thread_id=thread_id,
+            reply_to_message_id=message.message_id
+        )
+
+@bot.message_handler(commands=['games'])
+def mostrar_games(message):
+    chat_id = message.chat.id
+    thread_id = get_thread_id(message)
+    
+    texto = (
+        "⠀⠀ ㅤㅤ    ೨   ⠀⠀  ℳy games... ◝\n\n"
+        "ㅤ𖥻ㅤ/sorteo para iniciar un sorteo aleatorio. ₍ᐢ..ᐢ₎  \n"
+        "ㅤ𖥻ㅤ/quiz para iniciar una partida de quiz. ₍ᐢ..ᐢ₎  \n"
+        "ㅤ𖥻ㅤ/cherrybomb para iniciar una partida de cerezas explosivas. ₍ᐢ..ᐢ₎  \n"
+        "ㅤ𖥻ㅤ/mineria para iniciar una partida de mineria. ₍ᐢ..ᐢ₎  \n"
+        "ㅤ𖥻ㅤ/loteria para iniciar el sorteo de lotería. ₍ᐢ..ᐢ₎  \n"
+        "ㅤ𖥻ㅤ/redpink para iniciar una partida de red or pink. ₍ᐢ..ᐢ₎  \n"
+        "ㅤ𖥻ㅤ/carrera para iniciar una carrera anónima. ₍ᐢ..ᐢ₎  \n\n"
+        "ㅤㅤㅤᨳㅤ¡ℛecuerda! puedes usar /add y /rest para\n"
+        "ㅤㅤㅤactualizar los puntos de un usuario, etiquetandolo."
+    )
+    bot.send_message(chat_id, texto, message_thread_id=thread_id)
+
+@bot.message_handler(commands=['wins'])
+def mostrar_victorias(message):
+    thread_id = get_thread_id(message)
+    if not victorias_historico:
+        bot.send_message(message.chat.id, " (╥﹏╥)  aún no hay registros de victorias.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    ordenados = sorted(victorias_historico.items(), key=lambda x: x[1], reverse=True)
+    lineas = [f"@{u} — {v:02d} victorias" for u, v in ordenados]
+    texto = "      ‿︵       𝘝𝘪𝘤𝘵𝘰𝘳𝘪𝘢𝘴 𝘎𝘭𝘰𝘣𝘢𝘭𝘦𝘴 !\n\n" + "\n".join(lineas)
+    bot.send_message(message.chat.id, texto, message_thread_id=thread_id)
+
+@bot.message_handler(commands=['add'])
+def agregar_puntos(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes añadir puntos.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    args = message.text.split()
+    if len(args) < 3:
+        bot.send_message(chat_id, "✦ Estructura incorrecta: /add @usuario [monto]", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    usuario = args[1].replace('@', '')
+    try:
+        monto = int(args[2])
+    except ValueError:
+        bot.send_message(chat_id, " (╥﹏╥)  el monto debe ser un número entero.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    puntos_sistema[usuario] = puntos_sistema.get(usuario, 0) + monto
+    bot.send_message(chat_id, f"✦  ¡se le añadieron {monto} puntos a @{usuario}! ♡", message_thread_id=thread_id)
+
+@bot.message_handler(commands=['rest'])
+def restar_puntos(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes restar puntos.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    args = message.text.split()
+    if len(args) < 3:
+        bot.send_message(chat_id, "✦ Estructura incorrecta: /rest @usuario [monto]", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    usuario = args[1].replace('@', '')
+    try:
+        monto = int(args[2])
+    except ValueError:
+        bot.send_message(chat_id, " (╥﹏╥)  el monto debe ser un número entero.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    puntos_sistema[usuario] = puntos_sistema.get(usuario, 0) - monto
+    bot.send_message(chat_id, f"✦ Se restaron {monto} puntos a @{usuario}. Total: {puntos_sistema[usuario]} pts.", message_thread_id=thread_id)
+
+@bot.message_handler(commands=['check'])
+def ver_puntos(message):
+    thread_id = get_thread_id(message)
+    if not puntos_sistema:
+        bot.send_message(message.chat.id, " (╥﹏╥)  la cartilla de puntos está vacía.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    ordenados = sorted(puntos_sistema.items(), key=lambda x: x[1], reverse=True)
+    lineas = [f"{idx:02d}  ;  @{u} ({pts} pts)" for idx, (u, pts) in enumerate(ordenados, start=1)]
+    total_pts = sum(pts for pts in puntos_sistema.values() if pts > 0)
+
+    texto = "丙        ◟     point list.           𝆬          \n\n" + "\n".join(lineas) + f"\n\n   ୨୧        𝅄     total   ;    {total_pts} pts"
+    bot.send_message(message.chat.id, texto, message_thread_id=thread_id)
+
+@bot.message_handler(commands=['clear'])
+def reiniciar_puntos(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes reiniciar la cartilla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    puntos_sistema.clear()
+    bot.send_message(chat_id, "✦ ¡La cartilla de puntos ha sido reiniciada con éxito!", message_thread_id=thread_id)
+
+@bot.message_handler(commands=['beg'])
+def suplicar_robux(message):
+    chat_id = message.chat.id
+    thread_id = get_thread_id(message)
+    
+    sender_name = message.from_user.first_name
+    sender_id = message.from_user.id
+    nickname1 = f"[{sender_name}](tg://user?id={sender_id})"
+
+    if message.reply_to_message and message.reply_to_message.from_user:
+        target_user = message.reply_to_message.from_user
+        target_name = target_user.first_name
+        target_id = target_user.id
+        nickname2 = f"[{target_name}](tg://user?id={target_id})"
+        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{nickname1} está suplicando a {nickname2} por robux...ㅤ"
+    else:
+        texto = f"ㅤ૮  .ܸ  .ܸ ྀི ა  ㅤ{nickname1} está suplicando por robux...ㅤ"
+
+    bot.send_message(
+        chat_id, 
+        texto, 
+        parse_mode="Markdown",
+        message_thread_id=thread_id, 
+        reply_to_message_id=message.message_id
+    )
+
+    if STICKERS_CHERRIE:
+        sticker_elegido = random.choice(STICKERS_CHERRIE)
+        try:
+            bot.send_sticker(chat_id, sticker_elegido, message_thread_id=thread_id)
+        except Exception:
+            pass
+
+@bot.message_handler(commands=['cancelar'])
+def cancelar_juego_activo(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes cancelar partidas.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    juego_cancelado = None
+
+    if chat_id in sorteos and sorteos[chat_id]["activo"]:
+        if sorteos[chat_id]["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
+        sorteos[chat_id]["activo"] = False
+        juego_cancelado = "sorteo"
+
+    if quiz_juego["fase"] != "inactivo":
+        if quiz_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
+        quiz_juego["fase"] = "inactivo"
+        juego_cancelado = "quiz de batalla"
+
+    if mineria_juego["fase"] != "inactivo":
+        if mineria_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
+        mineria_juego["fase"] = "inactivo"
+        juego_cancelado = "minería"
+
+    if loteria_juego["fase"] != "inactivo":
+        if loteria_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
+        loteria_juego["fase"] = "inactivo"
+        juego_cancelado = "lotería"
+
+    if redpink_juego["fase"] != "inactivo":
+        if redpink_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
+        redpink_juego["fase"] = "inactivo"
+        juego_cancelado = "red or pink"
+
+    if carrera_juego["fase"] != "inactivo":
+        if carrera_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
+        carrera_juego["fase"] = "inactivo"
+        juego_cancelado = "carrera anónima"
+
+    if cherrybomb_juego["fase"] != "inactivo":
+        if cherrybomb_juego["admin_id"] != user_id:
+            bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla o cancelarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+            return
+        cherrybomb_juego["fase"] = "inactivo"
+        juego_cancelado = "cherry bomb"
+
+    if juego_cancelado:
+        texto = f"ㅤ ୨୧ ࣪ ׅ ㅤla partida de {juego_cancelado} fue cancelada por su admin. ૮ ˶• ˔ •˶ ა"
+        bot.send_message(chat_id, texto, message_thread_id=thread_id)
+    else:
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ninguna partida activa para cancelar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+
+
+# ==========================================
+# 1. RED OR PINK (ACTUALIZADO EXPACTO)
+# ==========================================
+
+def generar_texto_lobby_redpink():
+    parts = "\n".join([f"        ⊹    @{p}" for p in redpink_juego["participantes"]]) if redpink_juego["participantes"] else "        ⊹    @"
+    return (
+        "ㅤ ⪩⪨     ㅤnueva partida de red or pink  .ᐟ\n\n"
+        "   ⎯    𝗽︩︩︪articipantes     :\n"
+        f"{parts}\n\n"
+        "₍˄..˄₎꠹     presiona el botón para poder hacer tu apuesta...\n"
+        "admin, puedes colocar /redpinkstart para dar inicio a la partida."
+    )
+
+@bot.message_handler(commands=['redpink'])
+def crear_redpink(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar Red or Pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if redpink_juego["fase"] != "inactivo":
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay una partida de Red or Pink activa.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    premio = message.text[8:].strip()
+
+    redpink_juego["fase"] = "lobby"
+    redpink_juego["chat_id"] = chat_id
+    redpink_juego["thread_id"] = thread_id
+    redpink_juego["admin_id"] = user_id
+    redpink_juego["premio"] = premio
+    redpink_juego["participantes"].clear()
+    redpink_juego["elecciones"].clear()
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_redpink_lobby"))
+
+    msg = bot.send_message(chat_id, generar_texto_lobby_redpink(), reply_markup=markup, message_thread_id=thread_id)
+    redpink_juego["msg_lobby_id"] = msg.message_id
+
+@bot.callback_query_handler(func=lambda call: call.data == "unirse_redpink_lobby")
+def unirse_redpink_callback(call):
+    if redpink_juego["fase"] != "lobby":
+        bot.answer_callback_query(call.id, "El lobby ya no está disponible.", show_alert=True)
+        return
+
+    username = call.from_user.username if call.from_user.username else call.from_user.first_name
+    usuarios_ids[username] = call.from_user.id
+
+    if username in redpink_juego["participantes"]:
+        bot.answer_callback_query(call.id, "Ya estás en la partida.", show_alert=True)
+        return
+
+    redpink_juego["participantes"].append(username)
+    bot.answer_callback_query(call.id, "¡Te has unido a Red or Pink!")
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_redpink_lobby"))
+    try:
+        bot.edit_message_text(generar_texto_lobby_redpink(), redpink_juego["chat_id"], redpink_juego["msg_lobby_id"], reply_markup=markup)
+    except Exception:
+        pass
+
+@bot.message_handler(commands=['redpinkstart'])
+def iniciar_redpink_apuestas(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar el Red or Pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if redpink_juego["fase"] != "lobby":
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby activo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if redpink_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if not redpink_juego["participantes"]:
+        bot.send_message(chat_id, " (╥﹏╥)  se necesitan participantes para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    try:
+        bot.edit_message_reply_markup(chat_id, redpink_juego["msg_lobby_id"], reply_markup=None)
+    except Exception:
+        pass
+
+    redpink_juego["fase"] = "apuestas"
+    texto_start = (
+        "⎯        ¡es hora de apostar!\n\n"
+        "(ᐢ>‌⩊<) sigue tu instinto y escribe /red o /pink según cuál crees que será la monedita ganadora. \n"
+        "admin, puedes cerrar las apuestas con /redpinknow cuando estés listo."
+    )
+    bot.send_message(chat_id, texto_start, message_thread_id=thread_id)
+
+@bot.message_handler(commands=['red', 'pink'])
+def votar_redpink(message):
+    chat_id = message.chat.id
+    username = message.from_user.username if message.from_user.username else message.from_user.first_name
+    thread_id = get_thread_id(message)
+
+    if redpink_juego["fase"] != "apuestas" or chat_id != redpink_juego["chat_id"]:
+        return
+
+    if username not in redpink_juego["participantes"]:
+        return
+
+    voto = message.text.split()[0].replace('/', '').lower()
+    redpink_juego["elecciones"][username] = voto
+    bot.send_message(chat_id, f"✦ @{username} ha apostado por {voto.upper()}!", message_thread_id=thread_id)
+
+@bot.message_handler(commands=['redpinknow'])
+def cerrar_redpink_resultado(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if redpink_juego["fase"] != "apuestas":
+        bot.send_message(chat_id, " (╥﹏╥)  las apuestas no están abiertas.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if redpink_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    redpink_juego["fase"] = "inactivo"
+
+    # Si alguien no apostó, se le asigna aleatoriamente
+    for p in redpink_juego["participantes"]:
+        if p not in redpink_juego["elecciones"]:
+            redpink_juego["elecciones"][p] = random.choice(["red", "pink"])
+
+    resultado = random.choice(["RED", "PINK"])
+
+    ganadores = [p for p, eleccion in redpink_juego["elecciones"].items() if eleccion.upper() == resultado]
+
+    for g in ganadores:
+        registrar_victoria(g)
+
+    # Sticker aleatorio del pack
+    if STICKERS_CHERRIE:
+        try:
+            bot.send_sticker(chat_id, random.choice(STICKERS_CHERRIE), message_thread_id=thread_id)
+        except Exception:
+            pass
+
+    parts_ganadores = "\n".join([f"        ⊹    @{g}" for g in ganadores]) if ganadores else "        ⊹    nadie"
+
+    texto_res = (
+        f"⎯        ¡el resultado es... {resultado}!  ♡\n\n"
+        "   (๑´`๑)     ganadores :\n"
+        f"{parts_ganadores}"
+    )
+    bot.send_message(chat_id, texto_res, message_thread_id=thread_id)
+
+
+# ==========================================
+# 2. MINERÍA (TURNOS INTERCALADOS STRICTOS)
+# ==========================================
+
+def generar_texto_lobby_mineria():
+    return (
+        "ㅤㅤᡣ𐭩ㅤㅤㅤ¡ℳineria iniciada!ㅤㅤㅤㅤㅤㅤ\n\n"
+        " ◌   ֢  ׄ   todos tienen la oportunidad de minar, pero... ¿tendrán la suerte de obtener las mejores recompensas? presionen el botón para descubrirlo. ( ;´꒳;`) \n"
+    )
+
+RECOMPENSAS_MINERIA = [
+    {"p": 0, "m": "nada... ( ꩜ ᯅ ꩜;)\n¡suerte para la próxima!", "weight": 20},
+    {"p": 3, "m": "   ⊹     una piedrita común...\n૮ • ﻌ - ა ¡tienes 3 puntos!", "weight": 18},
+    {"p": 5, "m": "   ⊹     un pedacito de carbón... \n(´๑•_•๑) no es mucho, pero sirve...\n¡tienes 5 puntos!", "weight": 16},
+    {"p": 8, "m": "   ⊹     una piedra que brilla un poquito...\n૮₍´｡• ᵕ •｡₎ა ¡tienes 8 puntos!", "weight": 14},
+    {"p": 12, "m": "   ⊹    un cristal de cuarzo pequeño...\n(ᐡ･ ﻌ ･ᐡ) ¡qué bonito!\n¡tienes 12 puntos!", "weight": 12},
+    {"p": 18, "m": "   ⊹     una pequeña cueva con honguitos brillantes...\n꒰◍ॢ•ᴗ•◍ॢ꒱ ¡tienes 18 puntos!", "weight": 10},
+    {"p": 25, "m": "   ⊹     un fragmento de hierro antiguo...\n૮₍˶• . • ⑅₎ა parece útil...\n¡tienes 8 puntos!", "weight": 8},
+    {"p": 32, "m": "   ⊹     un cristal azul escondido...\n૮₍˶ᵔ ᵕ ᵔ˶₎ა ¡qué hallazgo tan lindo!\n¡tienes 32 puntos!", "weight": 7},
+    {"p": 40, "m": "   ⊹     una moneda vieja enterrada...\n૮꒰ต´˘ต꒱ა alguien la perdió hace mucho...\n¡tienes 40 puntos!", "weight": 6},
+    {"p": 50, "m": "   ⊹     una amatista brillante...\n(∗˃̶ ᵕ ˂̶∗) ¡encontraste algo especial!\n¡tienes 50 puntos!", "weight": 5},
+    {"p": 60, "m": "   ⊹    un cristal con energía extraña...\n૮꒰˶˃̵ ^ ˂̵˵꒱ა ¡brilla muchísimo!\n¡tienes 60 puntos!", "weight": 4},
+    {"p": 70, "m": "   ⊹     un pequeño cofre bajo las rocas...\n૮꒰⑅ᐢ ᵕ ᵕ ᐢ⑅꒱ ¡¿qué habrá dentro?!\n¡tienes 70 puntos!", "weight": 3},
+    {"p": 78, "m": "   ⊹     una perla escondida bajo la tierra...\n(⑅˘͈ ᵕ ˘͈ )  ¡es preciosa!\n¡tienes 78 puntos!", "weight": 2.5},
+    {"p": 85, "m": "   ⊹     una pequeña veta de oro...\n໒꒰ྀི ∩ ˃ ᵕ ˂ ∩ ꒱ྀི১ ¡qué suerte!\n¡tienes 85 puntos!", "weight": 2},
+    {"p": 90, "m": "   ⊹     un zafiro muy raro...\n૮꒰ྀི ᵔ ๑ ᵔ ꒱ა ¡tuviste mucha suerte!\n¡tienes 90 puntos!", "weight": 1.5},
+    {"p": 95, "m": "   ⊹     un diamante rosa brillante...\n♡ ᖭི(ˊᗜˋ*)ᖫྀ ¡ES HERMOSO!\n¡tienes 95 puntos!", "weight": 1},
+    {"p": 100, "m": "   ⊹    el tesoro secreto de cherrie...\n(♡´𓈒𓂂˘˘♡) ¡encontraste algo que casi nadie encuentra!\n¡tienes 100 puntos!", "weight": 0.5}
+]
+
+@bot.message_handler(commands=['mineria'])
+def crear_mineria(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar minería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if mineria_juego["fase"] != "inactivo":
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay una partida de minería activa.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    premio = message.text[8:].strip()
+
+    mineria_juego["fase"] = "lobby"
+    mineria_juego["chat_id"] = chat_id
+    mineria_juego["thread_id"] = thread_id
+    mineria_juego["admin_id"] = user_id
+    mineria_juego["premio"] = premio
+    mineria_juego["participantes"] = []
+    mineria_juego["puntos"] = {}
+    mineria_juego["turnos_restantes"] = {}
+    mineria_juego["turno_actual_index"] = 0
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_mineria_lobby"))
+
+    msg = bot.send_message(chat_id, generar_texto_lobby_mineria(), reply_markup=markup, message_thread_id=thread_id)
+    mineria_juego["msg_lobby_id"] = msg.message_id
+
+@bot.callback_query_handler(func=lambda call: call.data == "unirse_mineria_lobby")
+def unirse_mineria_callback(call):
+    if mineria_juego["fase"] != "lobby":
+        bot.answer_callback_query(call.id, "El lobby ya no está disponible.", show_alert=True)
+        return
+
+    username = call.from_user.username if call.from_user.username else call.from_user.first_name
+    usuarios_ids[username] = call.from_user.id
+
+    if username in mineria_juego["participantes"]:
+        bot.answer_callback_query(call.id, "Ya estás en la partida.", show_alert=True)
+        return
+
+    mineria_juego["participantes"].append(username)
+    mineria_juego["puntos"][username] = 0
+    mineria_juego["turnos_restantes"][username] = 3
+    bot.answer_callback_query(call.id, "¡Te has unido a Minería!")
+
+    bot.send_message(mineria_juego["chat_id"], f"  ୧        @{username} se ha unido. ¿listo para minar?", message_thread_id=mineria_juego["thread_id"])
+
+@bot.message_handler(commands=['mineriastart'])
+def iniciar_mineria_start(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar la minería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if mineria_juego["fase"] != "lobby":
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby activo de minería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if mineria_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if not mineria_juego["participantes"]:
+        bot.send_message(chat_id, " (╥﹏╥)  se requieren participantes para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    try:
+        bot.edit_message_reply_markup(chat_id, mineria_juego["msg_lobby_id"], reply_markup=None)
+    except Exception:
+        pass
+
+    mineria_juego["fase"] = "jugando"
+    mineria_juego["turno_actual_index"] = 0
+    siguiente_turno_mineria(chat_id)
+
+def siguiente_turno_mineria(chat_id):
+    thread_id = mineria_juego["thread_id"]
+    
+    # Buscar el siguiente participante que aún tenga turnos intercalados en orden estricto
+    total = len(mineria_juego["participantes"])
+    buscados = 0
+    
+    while buscados < total:
+        idx = mineria_juego["turno_actual_index"] % total
+        p = mineria_juego["participantes"][idx]
+        if mineria_juego["turnos_restantes"].get(p, 0) > 0:
+            texto = (
+                f"ㅤ୭ৎ ࣪ ׅ ㅤㅤ¡turno de @{p}!\n"
+                "ㅤ— ㅤㅤusa /minar para probar tu suerte."
+            )
+            bot.send_message(chat_id, texto, message_thread_id=thread_id)
+            return
+        mineria_juego["turno_actual_index"] += 1
+        buscados += 1
+
+    finalizar_mineria(chat_id)
+
+@bot.message_handler(commands=['minar'])
+def minar_accion(message):
+    chat_id = message.chat.id
+    username = message.from_user.username if message.from_user.username else message.from_user.first_name
+    thread_id = get_thread_id(message)
+
+    if mineria_juego["fase"] != "jugando" or chat_id != mineria_juego["chat_id"]:
+        return
+
+    idx = mineria_juego["turno_actual_index"] % len(mineria_juego["participantes"])
+    jugador_esperado = mineria_juego["participantes"][idx]
+
+    if username != jugador_esperado:
+        return
+
+    weights = [r["weight"] for r in RECOMPENSAS_MINERIA]
+    item = random.choices(RECOMPENSAS_MINERIA, weights=weights, k=1)[0]
+
+    puntos = item["p"]
+    mineria_juego["puntos"][username] += puntos
+    mineria_juego["turnos_restantes"][username] -= 1
+    mineria_historico[username] = mineria_historico.get(username, 0) + puntos
+
+    msg_res = (
+        f"  ୧       @{username}, encontraste...\n\n"
+        f"{item['m']}"
+    )
+    bot.send_message(chat_id, msg_res, message_thread_id=thread_id)
+    
+    # Avanzar turno de manera intercalada
+    mineria_juego["turno_actual_index"] += 1
+    time.sleep(2)
+    siguiente_turno_mineria(chat_id)
+
+def finalizar_mineria(chat_id):
+    thread_id = mineria_juego["thread_id"]
+    ordenados = sorted(mineria_juego["puntos"].items(), key=lambda x: x[1], reverse=True)
+    lineas = [f" ֢  ׄ   @{u} — {pts} points." for u, pts in ordenados]
+    
+    if ordenados and ordenados[0][1] > 0:
+        registrar_victoria(ordenados[0][0])
+
+    texto = "ㅤㅤ⠀ৎ⠀ㅤㅤ ℛesultados  :   \n\n" + "\n".join(lineas)
+    bot.send_message(chat_id, texto, message_thread_id=thread_id)
+    mineria_juego["fase"] = "inactivo"
+
+
+# ==========================================
+# 3. LOTERÍA (MENSAJES EXACTOS A LO PEDIDO)
+# ==========================================
+
+@bot.message_handler(commands=['loteria'])
+def crear_loteria(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar la lotería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    premio = message.text[8:].strip()
+    if not premio:
+        premio = "5 robux"
+
+    loteria_juego["fase"] = "compra"
+    loteria_juego["chat_id"] = chat_id
+    loteria_juego["thread_id"] = thread_id
+    loteria_juego["admin_id"] = user_id
+    loteria_juego["premio"] = premio
+    loteria_juego["tickets_vendidos"].clear()
+    loteria_juego["usuarios_registrados"].clear()
+
+    texto = (
+        "ㅤ୭ৎ ࣪ ׅ ㅤㅤ¡ha empezado la lotería!\n"
+        f"prueba tu suerte comprando tus tickets, usa /tickets para recibir 5 oportunidades para ganar el premio mayor, {premio}."
+    )
+    bot.send_message(chat_id, texto, message_thread_id=thread_id)
+
+@bot.message_handler(commands=['tickets'])
+def pedir_tickets(message):
+    chat_id = message.chat.id
+    username = message.from_user.username if message.from_user.username else message.from_user.first_name
+    thread_id = get_thread_id(message)
+
+    if loteria_juego["fase"] != "compra" or chat_id != loteria_juego["chat_id"]:
+        return
+
+    if username in loteria_juego["usuarios_registrados"]:
+        return
+
+    usados = set(loteria_juego["tickets_vendidos"].keys())
+    
+    # Generar 5 tickets con prefijo CHERRY y 4 dígitos aleatorios únicos
+    mis_tickets = []
+    while len(mis_tickets) < 5:
+        num = random.randint(1000, 9999)
+        t_code = f"CHERRY{num}"
+        if t_code not in usados and t_code not in mis_tickets:
+            mis_tickets.append(t_code)
+
+    for t in mis_tickets:
+        loteria_juego["tickets_vendidos"][t] = username
+    loteria_juego["usuarios_registrados"].add(username)
+
+    nickname_show = message.from_user.first_name.upper()
+
+    texto_tickets = (
+        f"⠀ꕮ⠀ 𝑳ottery tickets for {nickname_show}.\n\n"
+        f" 𝅄   {mis_tickets[0]}\n"
+        f" 𝅄   {mis_tickets[1]}\n"
+        f" 𝅄   {mis_tickets[2]}\n"
+        f" 𝅄   {mis_tickets[3]}\n"
+        f" 𝅄   {mis_tickets[4]}"
+    )
+    bot.send_message(chat_id, texto_tickets, message_thread_id=thread_id)
+
+@bot.message_handler(commands=['jugarloteria'])
+def realizar_sorteo_loteria(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes realizar el sorteo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if loteria_juego["fase"] != "compra":
+        bot.send_message(chat_id, " (╥﹏╥)  no hay una lotería en fase de compra.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if loteria_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la lotería puede jugar el sorteo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if not loteria_juego["tickets_vendidos"]:
+        bot.send_message(chat_id, " (╥﹏╥)  nadie compró tickets en esta lotería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    ganador_ticket = random.choice(list(loteria_juego["tickets_vendidos"].keys()))
+    ganador_user = loteria_juego["tickets_vendidos"][ganador_ticket]
+
+    loteria_juego["fase"] = "espera_reclamo"
+    loteria_juego["ticket_ganador"] = ganador_ticket
+    loteria_juego["ganador_esperado"] = ganador_user
+    loteria_juego["reclamado"] = False
+
+    texto = (
+        "ㅤㅤᡣ𐭩ㅤㅤㅤresultados de la lotería cherrie . . .\n"
+        f"         —         nuestro ticket ganador es el {ganador_ticket}.\n"
+        "el ganador tiene 45 segundos para escribir ¡lotería! en el chat y asegurar su victoria."
+    )
+    bot.send_message(chat_id, texto, message_thread_id=thread_id)
+
+    if loteria_juego["timer_task"]:
+        loteria_juego["timer_task"].cancel()
+
+    t = threading.Timer(45.0, timer_reclamo_loteria_expirado, args=[chat_id])
+    loteria_juego["timer_task"] = t
+    t.start()
+
+def timer_reclamo_loteria_expirado(chat_id):
+    if loteria_juego["fase"] == "espera_reclamo" and not loteria_juego["reclamado"]:
+        thread_id = loteria_juego["thread_id"]
+        bot.send_message(
+            chat_id,
+            f"(╥﹏╥)  @{loteria_juego['ganador_esperado']} demoró mucho y no cantó su lotería...",
+            message_thread_id=thread_id
+        )
+        loteria_juego["fase"] = "inactivo"
+
+@bot.message_handler(func=lambda m: loteria_juego["fase"] == "espera_reclamo")
+def validar_reclamo_exacto(message):
+    if message.chat.id == loteria_juego["chat_id"]:
+        txt = message.text.strip()
+        if txt == "¡lotería!":
+            username = message.from_user.username if message.from_user.username else message.from_user.first_name
+            if username == loteria_juego["ganador_esperado"]:
+                loteria_juego["reclamado"] = True
+                loteria_juego["fase"] = "inactivo"
+                if loteria_juego["timer_task"]:
+                    loteria_juego["timer_task"].cancel()
+                
+                registrar_victoria(username)
+                texto = f"✦  ¡@{username}  es el ganador de la lotería! ha ganado {loteria_juego['premio']} ♡"
+                bot.send_message(message.chat.id, texto, message_thread_id=get_thread_id(message))
+
+
+# ==========================================
+# 4. CARRERA ANÓNIMA (COMPLETAMENTE EXACTA)
+# ==========================================
+
+@bot.message_handler(commands=['carrera'])
+def crear_carrera(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar la carrera.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if carrera_juego["fase"] != "inactivo":
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay una carrera activa.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    premio = message.text[8:].strip()
+
+    carrera_juego["fase"] = "lobby"
+    carrera_juego["chat_id"] = chat_id
+    carrera_juego["thread_id"] = thread_id
+    carrera_juego["admin_id"] = user_id
+    carrera_juego["premio"] = premio
+    carrera_juego["participantes"].clear()
+    carrera_juego["emojis_asignados"].clear()
+    carrera_juego["posiciones"].clear()
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_carrera_lobby"))
+
+    texto_lobby = (
+        "ㅤㅤ୭ৎ ࣪ ׅ ㅤㅤ 𝗰︩︪arrera anónima iniciada!\n\n"
+        "(⌯ˇ- ˇ⌯)◜ nadie sabe quién es quién hasta que la partida finalice.\n"
+        "ㅤ¡presiona el botón para unirte! admin, inicia la carrera con /carrerastart."
+    )
+    msg = bot.send_message(chat_id, texto_lobby, reply_markup=markup, message_thread_id=thread_id)
+    carrera_juego["msg_lobby_id"] = msg.message_id
+
+@bot.callback_query_handler(func=lambda call: call.data == "unirse_carrera_lobby")
+def unirse_carrera_callback(call):
+    if carrera_juego["fase"] != "lobby":
+        bot.answer_callback_query(call.id, "El lobby de la carrera ya no está disponible.", show_alert=True)
+        return
+
+    username = call.from_user.username if call.from_user.username else call.from_user.first_name
+    usuarios_ids[username] = call.from_user.id
+
+    if username in carrera_juego["participantes"]:
+        bot.answer_callback_query(call.id, "Ya estás en la carrera.", show_alert=True)
+        return
+
+    carrera_juego["participantes"].append(username)
+    bot.answer_callback_query(call.id, "¡Te has unido a la carrera!")
+
+    texto_join = f"︵‌  @{username} se ha unido... ¿será el afortunado?   ₍˶ᵔ ˕ ᵔ˶₎"
+    bot.send_message(carrera_juego["chat_id"], texto_join, message_thread_id=carrera_juego["thread_id"])
+
+@bot.message_handler(commands=['carrerastart'])
+def iniciar_carrera_animacion(message):
+    chat_id, user_id = message.chat.id, message.from_user.id
+    thread_id = get_thread_id(message)
+
+    if not es_admin(chat_id, user_id):
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if carrera_juego["fase"] != "lobby":
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ninguna carrera en lobby.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if carrera_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la carrera puede dar inicio.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if not carrera_juego["participantes"]:
+        bot.send_message(chat_id, " (╥﹏╥)  se requieren participantes para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    try:
+        bot.edit_message_reply_markup(chat_id, carrera_juego["msg_lobby_id"], reply_markup=None)
+    except Exception:
+        pass
+
+    carrera_juego["fase"] = "corriendo"
+
+    # Barajar participantes para resolver sus emojis y orden totalmente al azar
+    participantes_shuffled = list(carrera_juego["participantes"])
+    random.shuffle(participantes_shuffled)
+
+    emojis_disponibles = random.sample(EMOJIS_CARRERA, len(participantes_shuffled))
+
+    for idx, p in enumerate(participantes_shuffled):
+        carrera_juego["emojis_asignados"][p] = emojis_disponibles[idx]
+        carrera_juego["posiciones"][p] = 0
+
+    texto_inicio = (
+        "ㅤ ⪩⪨     ㅤ  ㅤ¡ Ɩa carrera ha iniciado !\n"
+        "ㅤㅤ¿quién ganará? ¿quién soy? ¿quién es?\n"
+        "ㅤㅤㅤㅤㅤ¡ es un misterio !    (⌯ˇ- ˇ⌯)"
+    )
+    bot.send_message(chat_id, texto_inicio, message_thread_id=thread_id)
+
+    time.sleep(3)
+
+    # Iniciar la carrera en vivo con hilo
+    t = threading.Thread(target=ejecutar_animacion_carrera, args=(chat_id, participantes_shuffled))
+    t.daemon = True
+    t.start()
+
+def construir_tablero_carrera(participantes_ordenados):
+    TOTAL_PASOS = 21
+    lineas = []
+    for p in participantes_ordenados:
+        pos = carrera_juego["posiciones"][p]
+        emoji = carrera_juego["emojis_asignados"][p]
+
+        # Puntos antes y después
+        antes = " ·" * pos
+        despues = " ·" * (TOTAL_PASOS - pos)
+        
+        # Si llega a la meta
+        if pos >= TOTAL_PASOS:
+            lineas.append(f"{antes} {emoji} 🏁")
+        else:
+            lineas.append(f"{antes} {emoji}{despues} 🏁")
+
+    return "\n".join(lineas)
+
+def ejecutar_animacion_carrera(chat_id, participantes_shuffled):
+    thread_id = carrera_juego["thread_id"]
+    
+    texto_corran = (
+        "ㅤㅤㅤㅤ ㅤ¡  𝗰︩︪ׄorran  !\n" +
+        construir_tablero_carrera(participantes_shuffled)
+    )
+
+    msg_carrera = bot.send_message(chat_id, texto_corran, message_thread_id=thread_id)
+    carrera_juego["msg_carrera_id"] = msg_carrera.message_id
+
+    ganador = None
+    META = 21
+
+    while not ganador:
+        time.sleep(2)
+
+        # Mover emojis al mismo tiempo (avanzan 0, 1 o 2 de golpe)
+        for p in participantes_shuffled:
+            avance = random.choice([0, 1, 2])
+            carrera_juego["posiciones"][p] += avance
+
+            if carrera_juego["posiciones"][p] >= META and not ganador:
+                ganador = p
+
+        nuevo_tablero = (
+            "ㅤㅤㅤㅤ ㅤ¡  𝗰︩︪ׄorran  !\n" +
+            construir_tablero_carrera(participantes_shuffled)
+        )
+
+        if ganador:
+            nuevo_tablero += "\nㅤ¡¡ㅤ(ˊᗜˋ*)ㅤㅤ¡tenemos a un ganador!"
+
+        try:
+            bot.edit_message_text(nuevo_tablero, chat_id, carrera_juego["msg_carrera_id"])
+        except Exception:
+            pass
+
+    time.sleep(2)
+
+    emoji_ganador = carrera_juego["emojis_asignados"][ganador]
+    bot.send_message(
+        chat_id,
+        f"ㅤㅤ  ¡un anónimo ha cruzado la meta!\nㅤㅤ   ㅤ¿quién eres, {emoji_ganador}?",
+        message_thread_id=thread_id
+    )
+
+    time.sleep(4)
+
+    # Ordenar revelaciones dejando al ganador primero
+    lineas_revelacion = []
+    lineas_revelacion.append(f" ᜊ   ¡𝐆‌anador! {emoji_ganador} — @{ganador}")
+
+    for p in participantes_shuffled:
+        if p != ganador:
+            e = carrera_juego["emojis_asignados"][p]
+            lineas_revelacion.append(f" ᜊ   {e}  — @{p}")
+
+    texto_final = (
+        "ㅤㅤꔫ      ℛevelando identidades...\n\n" +
+        "\n".join(lineas_revelacion)
+    )
+
+    registrar_victoria(ganador)
+    bot.send_message(chat_id, texto_final, message_thread_id=thread_id)
+    carrera_juego["fase"] = "inactivo"
+
+
+# --- BUCLE PRINCIPAL DE TELEGRAM ---
+
+if __name__ == '__main__':
+    print("CherrieBot en ejecución correctamente...")
+    bot.infinity_polling()
