@@ -1058,7 +1058,7 @@ def generar_tablero_grid():
             if num in cherrybomb_juego["cerezas_comidas"]:
                 linea.append("❌")
             else:
-                linea.append(f"{num:2d}".strip())
+                linea.append(f"🍒{num}")
         grid += "   ".join(linea) + "\n"
     return grid.strip()
 
@@ -1348,6 +1348,7 @@ def comer_cereza(message):
         else:
             bot.send_message(chat_id, "✦ ¡Se ha reiniciado el tablero! Todas las cerezas están disponibles de nuevo.", message_thread_id=thread_id)
             cherrybomb_juego["cerezas_comidas"].clear()
+            bot.send_message(chat_id, "ㅤ⸜(*ˊᗜˋ*)⸝ㅤ¡el admin inició la partida de cherry bomb!\n  ⎯ ⠀aguarden un momento mientras se eligen las cerezas explosivas. tienen 45 segundos para seleccionar su cereza mortal en mi privado.", message_thread_id=thread_id)
             if cherrybomb_juego["modo"] == "players":
                 iniciar_ronda_privada_players(chat_id)
             else:
@@ -1363,6 +1364,9 @@ def comer_cereza(message):
 
     cherrybomb_juego["turno_index"] = (cherrybomb_juego["turno_index"] + 1) % len(cherrybomb_juego["participantes_activos"])
     time.sleep(2)
+    grid = generar_tablero_grid()
+    bot.send_message(chat_id, grid, message_thread_id=thread_id)
+    time.sleep(1)
     siguiente_turno_cherry(chat_id)
 
 def finalizar_cherrybomb(chat_id):
@@ -1381,7 +1385,7 @@ def finalizar_cherrybomb(chat_id):
 
 def generar_texto_lobby_mineria():
     return (
-        "ㅤㅤᡣ𐭩ㅤㅤㅤ¡ℳineria iniciada!ㅤㅤㅤㅤㅤㅤ\n\n"
+        "ㅤㅤᡣ𐭩ㅤㅤㅤ¡ℳineria iniciada!\n\n"
         " ◌   ֢  ׄ   todos tienen la oportunidad de minar, pero... ¿tendrán la suerte de obtener las mejores recompensas? presionen el botón para descubrirlo. ( ;´꒳;`) \n"
     )
 
@@ -1505,13 +1509,13 @@ def siguiente_turno_mineria(chat_id):
 
     jugador_turno = mineria_juego["turno_actual"]
     texto = (
-        f"ㅤ୭ৎ ࣪ ׅ ㅤㅤ¡turno de @{jugador_turno}!\n"
-        "ㅤ— ㅤㅤusa /minar para probar tu suerte."
+        f"ㅤㅤ ✿ㅤㅤ¡es el turno de @{jugador_turno} !ㅤㅤㅤㅤㅤㅤㅤㅤ\n"
+        "⠀ ᨭ⠀   escribe /minar para picar en la mina y descubrir tu recompensa ♡."
     )
     bot.send_message(chat_id, texto, message_thread_id=thread_id)
 
 @bot.message_handler(commands=['minar'])
-def minar_accion(message):
+def picar_mina(message):
     chat_id = message.chat.id
     username = message.from_user.username if message.from_user.username else message.from_user.first_name
     thread_id = get_thread_id(message)
@@ -1522,51 +1526,62 @@ def minar_accion(message):
     if username != mineria_juego.get("turno_actual"):
         return
 
-    weights = [r["weight"] for r in RECOMPENSAS_MINERIA]
-    item = random.choices(RECOMPENSAS_MINERIA, weights=weights, k=1)[0]
+    if mineria_juego["turnos_restantes"].get(username, 0) <= 0:
+        return
 
-    puntos = item["p"]
-    mineria_juego["puntos"][username] += puntos
     mineria_juego["turnos_restantes"][username] -= 1
-    
-    mineria_historico[username] = mineria_historico.get(username, 0) + puntos
 
-    msg_res = (
-        f"  ୧       @{username}, encontraste...\n\n"
-        f"{item['m']}"
+    pesos = [r["weight"] for r in RECOMPENSAS_MINERIA]
+    recompensa = random.choices(RECOMPENSAS_MINERIA, weights=pesos, k=1)[0]
+
+    pts = recompensa["p"]
+    mineria_juego["puntos"][username] += pts
+    mineria_historico[username] = mineria_historico.get(username, 0) + pts
+
+    msg_rec = (
+        f"  ୧        @{username} ha picado en la mina...\n\n"
+        f"{recompensa['m']}"
     )
-    bot.send_message(chat_id, msg_res, message_thread_id=thread_id)
+    bot.send_message(chat_id, msg_rec, message_thread_id=thread_id)
+
     time.sleep(2)
     siguiente_turno_mineria(chat_id)
 
 def finalizar_mineria(chat_id):
     thread_id = mineria_juego["thread_id"]
-    
-    ordenados = sorted(mineria_juego["puntos"].items(), key=lambda x: x[1], reverse=True)
-    
-    lineas = [f" ֢  ׄ   @{u} — {pts} points." for u, pts in ordenados]
-    
-    if ordenados and ordenados[0][1] > 0:
-        registrar_victoria(ordenados[0][0])
+    if not mineria_juego["puntos"]:
+        bot.send_message(chat_id, " (╥﹏╥)  la minería terminó sin participantes.", message_thread_id=thread_id)
+        mineria_juego["fase"] = "inactivo"
+        return
 
-    texto = "ㅤㅤ⠀ৎ⠀ㅤㅤ ℛesultados  :   \n\n" + "\n".join(lineas)
-    bot.send_message(chat_id, texto, message_thread_id=thread_id)
+    ordenados = sorted(mineria_juego["puntos"].items(), key=lambda x: x[1], reverse=True)
+    ganador, max_puntos = ordenados[0]
+    registrar_victoria(ganador)
+
+    lineas = [f"  ⊹    @{u}  —  {pts} pts" for u, pts in ordenados]
+    texto_final = (
+        "ㅤㅤ ✿ㅤㅤ¡la mineria ha finalizado!ㅤㅤㅤㅤㅤㅤㅤㅤ\n\n"
+        "   ⎯     Tabla de Puntuaciones   :\n"
+        + "\n".join(lineas) + "\n\n"
+        f"ㅤ⸜(*ˊᗜˋ*)⸝ㅤ¡felicidades @{ganador}! te llevas {mineria_juego['premio']} ♡."
+    )
+    bot.send_message(chat_id, texto_final, message_thread_id=thread_id)
     mineria_juego["fase"] = "inactivo"
 
-@bot.message_handler(commands=['checkmineria', 'bestminers'])
-def ver_best_miners(message):
+@bot.message_handler(commands=['checkmineria'])
+def check_mineria_historico(message):
     thread_id = get_thread_id(message)
     if not mineria_historico:
-        bot.send_message(message.chat.id, " (╥﹏╥)  aún no hay registros globales de minería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(message.chat.id, " (╥﹏╥)  aún no hay estadísticas globales de minería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     ordenados = sorted(mineria_historico.items(), key=lambda x: x[1], reverse=True)
-    lineas = [f"✦ @{u} — {pts} puntos." for u, pts in ordenados]
-    texto = "      ‿︵       𝘝𝘪𝘤𝘵𝘰𝘳𝘪𝘢𝘴 / 𝘉𝘦𝘴𝘵 𝘔𝘪𝘯𝘦𝘳𝘴 !\n\n" + "\n".join(lineas)
+    lineas = [f"{idx:02d}  ;  @{u} ({pts} pts acumulados)" for idx, (u, pts) in enumerate(ordenados, start=1)]
+    texto = "      ‿︵       𝘛𝘰𝘱 𝘔𝘪𝘯𝘦𝘳í𝘢 𝘈𝘤𝘶𝘮𝘶𝘭𝘢𝘥𝘰 !\n\n" + "\n".join(lineas)
     bot.send_message(message.chat.id, texto, message_thread_id=thread_id)
 
 @bot.message_handler(commands=['endmineria'])
-def forzar_end_mineria(message):
+def forzar_fin_mineria(message):
     chat_id, user_id = message.chat.id, message.from_user.id
     thread_id = get_thread_id(message)
 
@@ -1574,13 +1589,20 @@ def forzar_end_mineria(message):
         bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes finalizar la minería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    if mineria_juego["fase"] == "inactivo":
-        bot.send_message(chat_id, " (╥﹏╥)  no hay ninguna minería activa.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+    if mineria_juego["fase"] != "jugando":
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún juego de minería en curso.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    if mineria_juego["admin_id"] != user_id:
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     finalizar_mineria(chat_id)
 
 # --- LOTERÍA ---
+
+def generar_ticket():
+    return f"{random.randint(0, 9999):04d}"
 
 @bot.message_handler(commands=['loteria'])
 def crear_loteria(message):
@@ -1591,157 +1613,148 @@ def crear_loteria(message):
         bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar la lotería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    premio = message.text[8:].strip()
+    if loteria_juego["fase"] != "inactivo":
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay una lotería activa en proceso.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
 
-    loteria_juego["fase"] = "compra"
+    premio = message.text[8:].strip()
+    if not premio:
+        bot.send_message(chat_id, "✦ Estructura incorrecta. Ejemplo: /loteria VIP Mensual", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
+
+    loteria_juego["fase"] = "compras"
     loteria_juego["chat_id"] = chat_id
     loteria_juego["thread_id"] = thread_id
     loteria_juego["admin_id"] = user_id
     loteria_juego["premio"] = premio
     loteria_juego["tickets_vendidos"].clear()
     loteria_juego["usuarios_registrados"].clear()
+    loteria_juego["reclamado"] = False
 
     texto = (
-        "ㅤ୭ৎ ࣪ ׅ ㅤㅤ¡ha empezado la lotería!\n"
-        "prueba tu suerte comprando tus tickets, usa /tickets para recibir 5 oportunidades para ganar el premio mayor, 5 robux."
+        "      ✿    ¡ℒotería de cherrie abierta!      ✿\n\n"
+        f"  ⎯     premio : {premio}\n\n"
+        " 𖥻  obten tus boletos colocando /tickets (máximo 5 por persona).\n"
+        " 𖥻  admin, usa /jugarloteria cuando estén listos para girar la ruleta."
     )
     bot.send_message(chat_id, texto, message_thread_id=thread_id)
 
 @bot.message_handler(commands=['tickets'])
-def pedir_tickets(message):
+def obtener_tickets(message):
     chat_id = message.chat.id
+    display_name = message.from_user.first_name
     username = message.from_user.username if message.from_user.username else message.from_user.first_name
+    usuarios_ids[username] = message.from_user.id
     thread_id = get_thread_id(message)
 
-    if loteria_juego["fase"] != "compra" or chat_id != loteria_juego["chat_id"]:
+    if loteria_juego["fase"] != "compras" or chat_id != loteria_juego["chat_id"]:
         return
 
     if username in loteria_juego["usuarios_registrados"]:
-        bot.send_message(chat_id, f" (╥﹏╥)  @{username}, ya reclamaste tus 5 tickets para esta lotería.", message_thread_id=thread_id)
+        bot.send_message(chat_id, f" (╥﹏╥)  @{username}, ya has reclamado tus 5 tickets.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    usados = set(loteria_juego["tickets_vendidos"].keys())
-    disponibles = [f"CHERRY{random.randint(1000, 9999)}" for _ in range(500)]
-    disponibles = [t for t in disponibles if t not in usados]
-
-    mis_tickets = random.sample(disponibles, 5)
-    for t in mis_tickets:
-        loteria_juego["tickets_vendidos"][t] = username
     loteria_juego["usuarios_registrados"].add(username)
+    mis_tickets = []
+    for _ in range(5):
+        t = generar_ticket()
+        while t in loteria_juego["tickets_vendidos"]:
+            t = generar_ticket()
+        loteria_juego["tickets_vendidos"][t] = username
+        mis_tickets.append(f"🎫 `{t}`")
 
-    lista_tickets = "\n".join([f" 𝅄   {t}" for t in mis_tickets])
-    texto_res = (
-        f"⠀ꕮ⠀ 𝑳ottery tickets for {username}.\n\n"
-        f"{lista_tickets}"
-    )
-    bot.send_message(chat_id, texto_res, message_thread_id=thread_id)
+    str_t = ", ".join(mis_tickets)
+    bot.send_message(chat_id, f"🎟️ tickets for {display_name} : {str_t}", parse_mode="Markdown", message_thread_id=thread_id)
 
 @bot.message_handler(commands=['jugarloteria'])
-def realizar_sorteo_loteria(message):
+def jugar_loteria(message):
     chat_id, user_id = message.chat.id, message.from_user.id
     thread_id = get_thread_id(message)
 
     if not es_admin(chat_id, user_id):
-        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes realizar el sorteo.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes girar la lotería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    if loteria_juego["fase"] != "compra":
-        bot.send_message(chat_id, " (╥﹏╥)  no hay una lotería en fase de compra.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+    if loteria_juego["fase"] != "compras":
+        bot.send_message(chat_id, " (╥﹏╥)  la lotería no está en fase de compra de tickets.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if loteria_juego["admin_id"] != user_id:
-        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la lotería puede sortearla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if not loteria_juego["tickets_vendidos"]:
-        bot.send_message(chat_id, " (╥﹏╥)  nadie compró tickets en esta lotería.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún ticket registrado.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    ganador_ticket = random.choice(list(loteria_juego["tickets_vendidos"].keys()))
-    ganador_user = loteria_juego["tickets_vendidos"][ganador_ticket]
+    loteria_juego["fase"] = "reclamando"
+    ticket_ganador = random.choice(list(loteria_juego["tickets_vendidos"].keys()))
+    ganador_esperado = loteria_juego["tickets_vendidos"][ticket_ganador]
 
-    loteria_juego["fase"] = "espera_reclamo"
-    loteria_juego["ticket_ganador"] = ganador_ticket
-    loteria_juego["ganador_esperado"] = ganador_user
-    loteria_juego["tiempo_limite"] = time.time() + 45
-    loteria_juego["reclamado"] = False
+    loteria_juego["ticket_ganador"] = ticket_ganador
+    loteria_juego["ganador_esperado"] = ganador_esperado
+    loteria_juego["tiempo_limite"] = time.time() + 300
 
     texto = (
-        "ㅤㅤᡣ𐭩ㅤㅤㅤresultados de la lotería cherrie . . .\n"
-        f"         —         nuestro ticket ganador es el {ganador_ticket}.\n"
-        "el ganador tiene 45 segundos para escribir ¡lotería! en el chat y asegurar su victoria."
+        "  ✧    ¡𝒯enemos un ticket ganador!      ✧\n\n"
+        f" 🎫   ticket :  `{ticket_ganador}`\n\n"
+        f" 𖥻   @{ganador_esperado}, tienes 5 minutos para escribir 'reclamar' o 'claim' en este chat y reclamar tu premio!"
     )
-    bot.send_message(chat_id, texto, message_thread_id=thread_id)
+    bot.send_message(chat_id, texto, parse_mode="Markdown", message_thread_id=thread_id)
 
-    t = threading.Thread(target=timer_reclamo_loteria, args=(chat_id,))
-    t.daemon = True
-    t.start()
+    hilo_reclamar = threading.Thread(target=temporizador_reclamo_loteria, args=(chat_id,))
+    hilo_reclamar.daemon = True
+    hilo_reclamar.start()
 
-def timer_reclamo_loteria(chat_id):
-    time.sleep(45)
-    if loteria_juego["fase"] == "espera_reclamo" and not loteria_juego["reclamado"]:
-        thread_id = loteria_juego["thread_id"]
-        bot.send_message(
-            chat_id,
-            f"(╥﹏╥)  @{loteria_juego['ganador_esperado']} demoró mucho y no cantó su lotería...",
-            message_thread_id=thread_id
+@bot.message_handler(func=lambda m: loteria_juego["fase"] == "reclamando" and m.text and m.text.lower() in ["reclamar", "claim"])
+def procesar_reclamo_loteria(message):
+    chat_id = message.chat.id
+    username = message.from_user.username if message.from_user.username else message.from_user.first_name
+    thread_id = get_thread_id(message)
+
+    if chat_id != loteria_juego["chat_id"]:
+        return
+
+    if username.lower() == loteria_juego["ganador_esperado"].lower():
+        loteria_juego["reclamado"] = True
+        loteria_juego["fase"] = "inactivo"
+        registrar_victoria(username)
+
+        admin_user = bot.get_chat(loteria_juego["admin_id"]).username or "admin"
+        texto = (
+            f"⸜(*ˊᗜˋ*)⸝ ¡felicidades @{username}! tu reclamo fue exitoso.\n"
+            f"te llevas el premio : {loteria_juego['premio']} ♡. reclama con @{admin_user}"
         )
-        del loteria_juego["tickets_vendidos"][loteria_juego["ticket_ganador"]]
-        
-        if loteria_juego["tickets_vendidos"]:
-            loteria_juego["fase"] = "compra"
-            realizar_sorteo_loteria_directo(chat_id)
+        bot.send_message(chat_id, texto, message_thread_id=thread_id)
+
+def temporizador_reclamo_loteria(chat_id):
+    time.sleep(300)
+    if loteria_juego["fase"] == "reclamando" and not loteria_juego["reclamado"]:
+        thread_id = loteria_juego["thread_id"]
+        bot.send_message(chat_id, f" (╥﹏╥)  el tiempo para reclamar expiró. @{loteria_juego['ganador_esperado']} no reclamó a tiempo.", message_thread_id=thread_id)
+
+        tickets_restantes = {t: u for t, u in loteria_juego["tickets_vendidos"].items() if u.lower() != loteria_juego["ganador_esperado"].lower()}
+
+        if tickets_restantes:
+            nuevo_ticket = random.choice(list(tickets_restantes.keys()))
+            nuevo_ganador = tickets_restantes[nuevo_ticket]
+
+            loteria_juego["ticket_ganador"] = nuevo_ticket
+            loteria_juego["ganador_esperado"] = nuevo_ganador
+            loteria_juego["tiempo_limite"] = time.time() + 300
+
+            texto = (
+                "  ✧    ¡ℛesorteando lotería por falta de reclamo!      ✧\n\n"
+                f" 🎫   nuevo ticket :  `{nuevo_ticket}`\n\n"
+                f" 𖥻   @{nuevo_ganador}, tienes 5 minutos para escribir 'reclamar' o 'claim'!"
+            )
+            bot.send_message(chat_id, texto, parse_mode="Markdown", message_thread_id=thread_id)
+            temporizador_reclamo_loteria(chat_id)
         else:
-            bot.send_message(chat_id, " (╥﹏╥)  ya no quedan más tickets para sortear.", message_thread_id=thread_id)
+            bot.send_message(chat_id, " (╥﹏╥)  no quedan más participantes para resortear.", message_thread_id=thread_id)
             loteria_juego["fase"] = "inactivo"
 
-def realizar_sorteo_loteria_directo(chat_id):
-    ganador_ticket = random.choice(list(loteria_juego["tickets_vendidos"].keys()))
-    ganador_user = loteria_juego["tickets_vendidos"][ganador_ticket]
-
-    loteria_juego["fase"] = "espera_reclamo"
-    loteria_juego["ticket_ganador"] = ganador_ticket
-    loteria_juego["ganador_esperado"] = ganador_user
-    loteria_juego["tiempo_limite"] = time.time() + 45
-    loteria_juego["reclamado"] = False
-
-    thread_id = loteria_juego["thread_id"]
-    texto = (
-        "ㅤㅤᡣ𐭩ㅤㅤㅤresultados de la lotería cherrie . . .\n"
-        f"         —         nuestro ticket ganador es el {ganador_ticket}.\n"
-        "el ganador tiene 45 segundos para escribir ¡lotería! en el chat y asegurar su victoria."
-    )
-    bot.send_message(chat_id, texto, message_thread_id=thread_id)
-
-    t = threading.Thread(target=timer_reclamo_loteria, args=(chat_id,))
-    t.daemon = True
-    t.start()
-
-@bot.message_handler(func=lambda m: loteria_juego["fase"] == "espera_reclamo")
-def validar_reclamo_loteria(message):
-    if message.chat.id == loteria_juego["chat_id"]:
-        text_clean = message.text.strip().lower()
-        if text_clean in ["¡lotería!", "¡loteria!", "loteria!", "lotería!"]:
-            username = message.from_user.username if message.from_user.username else message.from_user.first_name
-            if username == loteria_juego["ganador_esperado"]:
-                loteria_juego["reclamado"] = True
-                loteria_juego["fase"] = "inactivo"
-                registrar_victoria(username)
-                premio_str = loteria_juego["premio"] if loteria_juego["premio"] else "5 robux"
-                texto = f"✦  ¡@{username}  es el ganador de la lotería! ha ganado {premio_str} ♡"
-                bot.send_message(message.chat.id, texto, message_thread_id=get_thread_id(message))
-
 # --- RED OR PINK ---
-
-def generar_texto_lobby_redpink():
-    parts = "\n".join([f"        ⊹    @{p}" for p in redpink_juego["participantes"]]) if redpink_juego["participantes"] else "        ⊹    @"
-    return (
-        "ㅤ ⪩⪨     ㅤnueva partida de red or pink  .ᐟ\n\n"
-        "   ⎯    𝗽︩︩︪articipantes     :\n"
-        f"{parts}\n\n"
-        "₍˄..˄₎꠹     presiona el botón para poder hacer tu apuesta...\n"
-        "admin, puedes colocar /redpinkstart para dar inicio a la partida."
-    )
 
 @bot.message_handler(commands=['redpink'])
 def crear_redpink(message):
@@ -1749,7 +1762,7 @@ def crear_redpink(message):
     thread_id = get_thread_id(message)
 
     if not es_admin(chat_id, user_id):
-        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar Red or Pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar red or pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if redpink_juego["fase"] != "inactivo":
@@ -1757,6 +1770,9 @@ def crear_redpink(message):
         return
 
     premio = message.text[8:].strip()
+    if not premio:
+        bot.send_message(chat_id, "✦ Estructura incorrecta. Ejemplo: /redpink 50 robux", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        return
 
     redpink_juego["fase"] = "lobby"
     redpink_juego["chat_id"] = chat_id
@@ -1769,7 +1785,13 @@ def crear_redpink(message):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_redpink_lobby"))
 
-    msg = bot.send_message(chat_id, generar_texto_lobby_redpink(), reply_markup=markup, message_thread_id=thread_id)
+    texto = (
+        "  ✧    ¡𝒩ueva partida de Red or Pink!      ✧\n\n"
+        f" ⎯     premio : {premio}\n\n"
+        " 𖥻   presiona el botón para unirte a la partida.\n"
+        " 𖥻   admin, usa /redpinkstart cuando todos se hayan unido."
+    )
+    msg = bot.send_message(chat_id, texto, reply_markup=markup, message_thread_id=thread_id)
     redpink_juego["msg_lobby_id"] = msg.message_id
 
 @bot.callback_query_handler(func=lambda call: call.data == "unirse_redpink_lobby")
@@ -1788,24 +1810,19 @@ def unirse_redpink_callback(call):
     redpink_juego["participantes"].add(username)
     bot.answer_callback_query(call.id, "¡Te has unido a Red or Pink!")
 
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_redpink_lobby"))
-    try:
-        bot.edit_message_text(generar_texto_lobby_redpink(), redpink_juego["chat_id"], redpink_juego["msg_lobby_id"], reply_markup=markup)
-    except Exception:
-        pass
+    bot.send_message(redpink_juego["chat_id"], f"  ୧        @{username} se ha unido a Red or Pink ♡.", message_thread_id=redpink_juego["thread_id"])
 
 @bot.message_handler(commands=['redpinkstart'])
-def iniciar_apuestas_redpink(message):
+def iniciar_redpink_start(message):
     chat_id, user_id = message.chat.id, message.from_user.id
     thread_id = get_thread_id(message)
 
     if not es_admin(chat_id, user_id):
-        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar Red or Pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes iniciar el juego.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if redpink_juego["fase"] != "lobby":
-        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby de Red or Pink listo para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  no hay ningún lobby activo de Red or Pink.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if redpink_juego["admin_id"] != user_id:
@@ -1821,42 +1838,54 @@ def iniciar_apuestas_redpink(message):
     except Exception:
         pass
 
-    redpink_juego["fase"] = "apuestas"
+    redpink_juego["fase"] = "votando"
 
-    texto_apuestas = (
-        "⎯        ¡es hora de apostar!\n\n"
-        "(ᐢ>‌⩊<) sigue tu instinto y escribe /red o /pink según cuál crees que será la monedita ganadora. \n"
-        "admin, puedes cerrar las apuestas con /redpinknow cuando estés listo."
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("🍓 Red", callback_data="rp_vote_red"),
+        types.InlineKeyboardButton("🌸 Pink", callback_data="rp_vote_pink")
     )
-    bot.send_message(chat_id, texto_apuestas, message_thread_id=thread_id)
 
-@bot.message_handler(commands=['red', 'pink'])
-def registrar_apuesta_redpink(message):
-    chat_id = message.chat.id
-    username = message.from_user.username if message.from_user.username else message.from_user.first_name
-    thread_id = get_thread_id(message)
+    texto = (
+        "  ✧    ¡𝒰na elección del destino!      ✧\n\n"
+        " 𖥻   elije tu bando sabiamente con los botones de abajo.\n"
+        " 𖥻   admin, usa /redpinknow para revelar el color ganador."
+    )
+    bot.send_message(chat_id, texto, reply_markup=markup, message_thread_id=thread_id)
 
-    if redpink_juego["fase"] != "apuestas" or chat_id != redpink_juego["chat_id"]:
+@bot.callback_query_handler(func=lambda call: call.data.startswith("rp_vote_"))
+def votar_redpink_callback(call):
+    if redpink_juego["fase"] != "votando":
+        bot.answer_callback_query(call.id, "La fase de votación ya terminó.", show_alert=True)
         return
+
+    username = call.from_user.username if call.from_user.username else call.from_user.first_name
 
     if username not in redpink_juego["participantes"]:
+        bot.answer_callback_query(call.id, "No estabas registrado en esta partida.", show_alert=True)
         return
 
-    eleccion = message.text.split()[0].replace('/', '').lower()
-    redpink_juego["elecciones"][username] = eleccion
-    bot.send_message(chat_id, f"✦ @{username} ha apostado por **{eleccion.upper()}** ♡", parse_mode="Markdown", message_thread_id=thread_id)
+    voto = call.data.split("_")[2]  # "red" o "pink"
+    redpink_juego["elecciones"][username] = voto
+
+    if voto == "pink":
+        msg_confirmacion = "⸜(ˊᗜˋ*)⸝  ¡ℬuena elección! eres team pink."
+    else:
+        msg_confirmacion = "⸜(ˊᗜˋ*)⸝  ¡ℬuena elección! eres team red."
+
+    bot.answer_callback_query(call.id, msg_confirmacion, show_alert=True)
 
 @bot.message_handler(commands=['redpinknow'])
-def cerrar_y_revelar_redpink(message):
+def revelar_redpink(message):
     chat_id, user_id = message.chat.id, message.from_user.id
     thread_id = get_thread_id(message)
 
     if not es_admin(chat_id, user_id):
-        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes cerrar las apuestas.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  no eres admin, no puedes revelar el resultado.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    if redpink_juego["fase"] != "apuestas":
-        bot.send_message(chat_id, " (╥﹏╥)  no hay una partida de Red or Pink en fase de apuestas.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+    if redpink_juego["fase"] != "votando":
+        bot.send_message(chat_id, " (╥﹏╥)  no hay una votación activa para revelar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     if redpink_juego["admin_id"] != user_id:
@@ -1867,42 +1896,48 @@ def cerrar_y_revelar_redpink(message):
         if p not in redpink_juego["elecciones"]:
             redpink_juego["elecciones"][p] = random.choice(["red", "pink"])
 
-    resultado = random.choice(["red", "pink"])
-    ganadores = [p for p, c in redpink_juego["elecciones"].items() if c == resultado]
+    color_ganador = random.choice(["red", "pink"])
+    ganadores = [p for p, eleccion in redpink_juego["elecciones"].items() if eleccion == color_ganador]
 
     for g in ganadores:
         registrar_victoria(g)
 
-    if STICKERS_CHERRIE:
-        sticker_elegido = random.choice(STICKERS_CHERRIE)
-        try:
-            bot.send_sticker(chat_id, sticker_elegido, message_thread_id=thread_id)
-        except Exception:
-            pass
+    if color_ganador == "pink":
+        bot.send_sticker(chat_id, STICKER_PINK, message_thread_id=thread_id)
+        if ganadores:
+            lista_str = "\n".join([f"        ⊹    @{g}" for g in ganadores])
+            texto_resultado = (
+                "⎯        ¡el resultado es... pink  ♡\n\n"
+                "   (๑´`๑)      ganadores :\n"
+                f"{lista_str}"
+            )
+        else:
+            texto_resultado = (
+                "⎯        ¡el resultado es... pink  ♡\n\n"
+                "   (๑´`๑)      ganadores :\n"
+                "        ⊹    ninguno..."
+            )
+    else:
+        bot.send_sticker(chat_id, STICKER_RED, message_thread_id=thread_id)
+        if ganadores:
+            lista_str = "\n".join([f"        ⊹    @{g}" for g in ganadores])
+            texto_resultado = (
+                "⎯        ¡el resultado es... red!  ♡\n\n"
+                "   (๑´`๑)      ganadores :\n"
+                f"{lista_str}"
+            )
+        else:
+            texto_resultado = (
+                "⎯        ¡el resultado es... red!  ♡\n\n"
+                "   (๑´`๑)      ganadores :\n"
+                "        ⊹    ninguno..."
+            )
 
-    resultado_str = "RED 🔴" if resultado == "red" else "PINK 🩷"
-    parts_ganadores = "\n".join([f"        ⊹    @{g}" for g in ganadores]) if ganadores else "        ⊹    ninguno..."
-
-    texto_res = (
-        f"⎯        ¡el resultado es... {resultado_str}!  ♡\n\n"
-        "   (๑´`๑)     ganadores :\n"
-        f"{parts_ganadores}"
-    )
-    bot.send_message(chat_id, texto_res, message_thread_id=thread_id)
+    time.sleep(1)
+    bot.send_message(chat_id, texto_resultado, message_thread_id=thread_id)
     redpink_juego["fase"] = "inactivo"
 
 # --- CARRERA ANÓNIMA ---
-
-def generar_texto_lobby_carrera():
-    parts = "\n".join([f"        ⊹    Corredor #{i+1}" for i in range(len(carrera_juego["participantes"]))]) if carrera_juego["participantes"] else "        ⊹    (esperando corredores...)"
-    return (
-        "ㅤㅤ ✿ㅤㅤ¡Nueva Carrera Anónima!ㅤㅤㅤㅤㅤㅤㅤㅤ\n"
-        f"Premio: {carrera_juego['premio']}\n\n"
-        "  ⠀⎯ ⠀  Corredores registrados     :\n"
-        f"{parts}\n\n"
-        "presiona el botón para unirte a la carrera...\n"
-        "admin, puedes usar /carrerastart para comenzar."
-    )
 
 @bot.message_handler(commands=['carrera'])
 def crear_carrera(message):
@@ -1914,13 +1949,10 @@ def crear_carrera(message):
         return
 
     if carrera_juego["fase"] != "inactivo":
-        bot.send_message(chat_id, " (╥﹏╥)  ya hay una carrera activa.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+        bot.send_message(chat_id, " (╥﹏╥)  ya hay una carrera en curso.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     premio = message.text[8:].strip()
-    if not premio:
-        bot.send_message(chat_id, "✦ Estructura incorrecta. Ejemplo: /carrera 20 robux", message_thread_id=thread_id, reply_to_message_id=message.message_id)
-        return
 
     carrera_juego["fase"] = "lobby"
     carrera_juego["chat_id"] = chat_id
@@ -1930,11 +1962,17 @@ def crear_carrera(message):
     carrera_juego["participantes"].clear()
     carrera_juego["emojis_asignados"].clear()
     carrera_juego["posiciones"].clear()
+    carrera_juego["emojis_orden_pista"].clear()
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_carrera_lobby"))
 
-    msg = bot.send_message(chat_id, generar_texto_lobby_carrera(), reply_markup=markup, message_thread_id=thread_id)
+    texto = (
+        "ㅤㅤ୭ৎ ࣪ ׅ ㅤㅤ 𝗰︩︪arrera anónima iniciada!\n\n"
+        "(⌯ˇ- ˇ⌯)◜ nadie sabe quién es quién hasta que la partida finalice.\n"
+        "ㅤ¡presiona el botón para unirte! admin, inicia la carrera con /carrerastart."
+    )
+    msg = bot.send_message(chat_id, texto, reply_markup=markup, message_thread_id=thread_id)
     carrera_juego["msg_lobby_id"] = msg.message_id
 
 @bot.callback_query_handler(func=lambda call: call.data == "unirse_carrera_lobby")
@@ -1947,22 +1985,17 @@ def unirse_carrera_callback(call):
     usuarios_ids[username] = call.from_user.id
 
     if username in carrera_juego["participantes"]:
-        bot.answer_callback_query(call.id, "Ya estás inscrito en la carrera.", show_alert=True)
-        return
-
-    if len(carrera_juego["participantes"]) >= len(EMOJIS_CARRERA):
-        bot.answer_callback_query(call.id, "La carrera ya alcanzó el cupo máximo.", show_alert=True)
+        bot.answer_callback_query(call.id, "Ya estás registrado en la carrera.", show_alert=True)
         return
 
     carrera_juego["participantes"].append(username)
     bot.answer_callback_query(call.id, "¡Te has unido a la carrera!")
 
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("୭ৎㅤ𝗝𝗢𝗜𝗡!", callback_data="unirse_carrera_lobby"))
-    try:
-        bot.edit_message_text(generar_texto_lobby_carrera(), carrera_juego["chat_id"], carrera_juego["msg_lobby_id"], reply_markup=markup)
-    except Exception:
-        pass
+    bot.send_message(
+        carrera_juego["chat_id"],
+        f"︵‌  @{username} se ha unido... ¿será el afortunado?   ₍˶ᵔ ˕ ᵔ˶₎",
+        message_thread_id=carrera_juego["thread_id"]
+    )
 
 @bot.message_handler(commands=['carrerastart'])
 def iniciar_carrera_start(message):
@@ -1981,8 +2014,8 @@ def iniciar_carrera_start(message):
         bot.send_message(chat_id, " (╥﹏╥)  solo el admin que inició la partida puede administrarla.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
-    if len(carrera_juego["participantes"]) < 2:
-        bot.send_message(chat_id, " (╥﹏╥)  se necesitan al menos 2 participantes para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
+    if not carrera_juego["participantes"]:
+        bot.send_message(chat_id, " (╥﹏╥)  se requieren participantes para iniciar.", message_thread_id=thread_id, reply_to_message_id=message.message_id)
         return
 
     try:
@@ -1990,80 +2023,116 @@ def iniciar_carrera_start(message):
     except Exception:
         pass
 
-    carrera_juego["fase"] = "jugando"
+    carrera_juego["fase"] = "corriendo"
 
-    emojis_disponibles = list(EMOJIS_CARRERA)
-    random.shuffle(emojis_disponibles)
-
-    for idx, p in enumerate(carrera_juego["participantes"]):
-        emoji_asig = emojis_disponibles[idx]
-        carrera_juego["emojis_asignados"][p] = emoji_asig
-        carrera_juego["posiciones"][p] = 0
-
-        uid = usuarios_ids.get(p)
-        if uid:
-            try:
-                bot.send_message(uid, f"✦ ¡Atención! Tu emoji asignado para la carrera es: {emoji_asig}")
-            except Exception:
-                pass
+    emojis_disponibles = random.sample(EMOJIS_CARRERA, len(EMOJIS_CARRERA))
+    for idx, user in enumerate(carrera_juego["participantes"]):
+        carrera_juego["emojis_asignados"][user] = emojis_disponibles[idx % len(emojis_disponibles)]
+        carrera_juego["posiciones"][user] = 0
 
     carrera_juego["emojis_orden_pista"] = list(carrera_juego["participantes"])
     random.shuffle(carrera_juego["emojis_orden_pista"])
 
-    msg_inicial = renderizar_pista_carrera()
-    msg = bot.send_message(chat_id, msg_inicial, message_thread_id=thread_id)
+    bot.send_message(
+        chat_id,
+        "ㅤ ⪩⪨     ㅤ  ㅤ¡ Ɩa carrera ha iniciado !\n"
+        "ㅤㅤ¿quién ganará? ¿quién soy? ¿quién es?\n"
+        "ㅤㅤㅤㅤㅤ¡ es un misterio !    (⌯ˇ- ˇ⌯)",
+        message_thread_id=thread_id
+    )
+
+    time.sleep(3)
+    pista_inicial = generar_pista_carrera()
+    msg = bot.send_message(chat_id, pista_inicial, message_thread_id=thread_id)
     carrera_juego["msg_carrera_id"] = msg.message_id
 
     hilo_carrera = threading.Thread(target=bucle_carrera_animacion, args=(chat_id,))
     hilo_carrera.daemon = True
     hilo_carrera.start()
 
-def renderizar_pista_carrera():
-    lineas = ["🏎️  ¡Carrera Anónima en Curso!  🏁\n"]
-    for p in carrera_juego["emojis_orden_pista"]:
-        emoji = carrera_juego["emojis_asignados"][p]
-        pos = carrera_juego["posiciones"][p]
-        pista = "—" * pos + emoji + "—" * (20 - pos) + "🏁"
-        lineas.append(pista)
-    return "\n".join(lineas)
+def generar_pista_carrera(mensaje_ganador=""):
+    LINEA_LONGITUD = 20
+    lineas = []
+    
+    for user in carrera_juego["emojis_orden_pista"]:
+        emoji = carrera_juego["emojis_asignados"][user]
+        pos = carrera_juego["posiciones"][user]
+        
+        espacios_antes = pos
+        espacios_despues = max(0, LINEA_LONGITUD - pos)
+        
+        linea = f" {'· ' * espacios_antes}{emoji}{' ·' * espacios_despues} 🏁"
+        lineas.append(linea)
+
+    pista_str = "\n".join(lineas)
+    texto = (
+        "ㅤㅤㅤㅤ ㅤ¡  𝗰︩︪orran  !\n"
+        f"{pista_str}"
+    )
+    if mensaje_ganador:
+        texto += f"\n{mensaje_ganador}"
+    return texto
 
 def bucle_carrera_animacion(chat_id):
-    meta = 20
+    LINEA_LONGITUD = 20
     ganador = None
 
-    while carrera_juego["fase"] == "jugando":
-        time.sleep(2)
+    while carrera_juego["fase"] == "corriendo":
+        time.sleep(2.5)
+        for user in carrera_juego["participantes"]:
+            avance = random.choices([0, 1, 2], weights=[20, 50, 30])[0]
+            carrera_juego["posiciones"][user] = min(LINEA_LONGITUD, carrera_juego["posiciones"][user] + avance)
 
-        for p in carrera_juego["participantes"]:
-            avance = random.choice([1, 2, 3])
-            carrera_juego["posiciones"][p] = min(meta, carrera_juego["posiciones"][p] + avance)
-            if carrera_juego["posiciones"][p] >= meta and not ganador:
-                ganador = p
-
-        pista_texto = renderizar_pista_carrera()
-        try:
-            bot.edit_message_text(pista_texto, chat_id, carrera_juego["msg_carrera_id"])
-        except Exception:
-            pass
+            if carrera_juego["posiciones"][user] >= LINEA_LONGITUD and not ganador:
+                ganador = user
 
         if ganador:
+            pista_final = generar_pista_carrera(mensaje_ganador="ㅤ¡¡ㅤ(ˊᗜˋ*)ㅤㅤ¡tenemos a un ganador!")
+            try:
+                bot.edit_message_text(pista_final, chat_id, carrera_juego["msg_carrera_id"])
+            except Exception:
+                pass
             break
+        else:
+            pista_actual = generar_pista_carrera()
+            try:
+                bot.edit_message_text(pista_actual, chat_id, carrera_juego["msg_carrera_id"])
+            except Exception:
+                pass
 
-    if ganador and carrera_juego["fase"] == "jugando":
-        time.sleep(1)
+    if ganador:
         registrar_victoria(ganador)
+        thread_id = carrera_juego["thread_id"]
         emoji_ganador = carrera_juego["emojis_asignados"][ganador]
-        texto_win = (
-            f"🎉 ¡Tenemos un ganador! 🎉\n\n"
-            f"El emoji {emoji_ganador} cruzó la meta primero.\n"
-            f"Felicidades a @{ganador}, te llevas {carrera_juego['premio']} ♡"
+
+        time.sleep(2)
+        bot.send_message(
+            chat_id,
+            "ㅤㅤ  ¡un anónimo ha cruzado la meta!\n"
+            f"ㅤㅤ   ㅤ¿quién eres, {emoji_ganador}?",
+            message_thread_id=thread_id
         )
-        bot.send_message(chat_id, texto_win, message_thread_id=carrera_juego["thread_id"])
 
-    carrera_juego["fase"] = "inactivo"
+        time.sleep(4)
+        lineas_revelacion = []
+        
+        lineas_revelacion.append(f" ᜊ   ¡𝐆‌anador! {emoji_ganador} — @{ganador}")
+        
+        for p in carrera_juego["participantes"]:
+            if p != ganador:
+                e = carrera_juego["emojis_asignados"][p]
+                lineas_revelacion.append(f" ᜊ   {e} — @{p}")
 
-# --- BUCLE PRINCIPAL DEL BOT ---
+        str_revelacion = "\n".join(lineas_revelacion)
+        texto_revelar = (
+            "ㅤㅤꔫ      ℛevelando identidades...\n\n"
+            f"{str_revelacion}"
+        )
+        bot.send_message(chat_id, texto_revelar, message_thread_id=thread_id)
+        carrera_juego["fase"] = "inactivo"
+
+# --- INICIALIZACIÓN Y BUCLE PRINCIPAL ---
 
 if __name__ == "__main__":
-    print("CherrieBot iniciado correctamente...")
+    print("CherrieBot se ha iniciado correctamente.")
     bot.infinity_polling(skip_pending=True)
